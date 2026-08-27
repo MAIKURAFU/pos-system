@@ -8,23 +8,46 @@
   <style>
     * { box-sizing: border-box; font-family: -apple-system, sans-serif; }
     body { margin: 0; padding: 15px; background: #f4f6f9; display: flex; gap: 15px; height: 100vh; }
-    .left-panel { flex: 1; background: #fff; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; }
+    
+    /* 左パネル */
+    .left-panel { flex: 1; background: #fff; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; overflow-y: auto; }
     .status-card { background: #eef2ff; border: 2px solid #6366f1; border-radius: 10px; padding: 15px; text-align: center; margin-bottom: 20px; }
     .chip-badge { font-size: 32px; font-weight: bold; color: #4f46e5; margin: 10px 0; }
     .btn-group { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
     .btn { padding: 15px; font-size: 18px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; background: #4f46e5; color: #fff; }
+    
+    /* 右パネル */
     .right-panel { flex: 2; background: #fff; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; }
-    .product-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 20px; flex: 1; overflow-y: auto; }
-    .product-card { border: 2px solid #e5e7eb; border-radius: 10px; padding: 15px; cursor: pointer; position: relative; background: #fafafa; }
+    .header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    .product-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 15px; flex: 1; overflow-y: auto; }
+    .product-card { border: 2px solid #e5e7eb; border-radius: 10px; padding: 12px; cursor: pointer; position: relative; background: #fafafa; display: flex; flex-direction: column; justify-content: space-between; }
     .product-card.active { border-color: #10b981; background: #ecfdf5; }
-    .product-card.out-of-stock { opacity: 0.5; pointer-events: none; }
+    .product-card.out-of-stock { opacity: 0.5; }
     .rate-badge { position: absolute; top: 10px; right: 10px; background: #ef4444; color: #fff; font-size: 12px; font-weight: bold; padding: 4px 8px; border-radius: 12px; }
+    
+    /* カートエリア */
     .cart-section { border-top: 2px solid #e5e7eb; padding-top: 15px; }
-    .checkout-btn { width: 100%; padding: 20px; font-size: 22px; font-weight: bold; background: #10b981; color: white; border: none; border-radius: 10px; cursor: pointer; }
-    .checkout-btn:disabled { background: #9ca3af; }
+    .cart-list { max-height: 120px; overflow-y: auto; margin-bottom: 10px; }
+    .cart-item { display: flex; justify-content: space-between; align-items: center; background: #f3f4f6; padding: 8px 12px; border-radius: 6px; margin-bottom: 6px; }
+    .cart-controls { display: flex; align-items: center; gap: 8px; }
+    .qty-btn { width: 28px; height: 28px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; }
+    .btn-minus { background: #f59e0b; color: white; }
+    .btn-plus { background: #10b981; color: white; }
+    .btn-del { background: #ef4444; color: white; font-size: 12px; padding: 0 6px; height: 28px; }
+
+    .restock-btn { background: #0b9f6e; color: white; border: none; padding: 8px 12px; border-radius: 6px; cursor: pointer; font-weight: bold; }
+    .checkout-btn { width: 100%; padding: 18px; font-size: 22px; font-weight: bold; background: #10b981; color: white; border: none; border-radius: 10px; cursor: pointer; }
+    .checkout-btn:disabled { background: #9ca3af; cursor: not-allowed; }
+
+    /* モーダル表示 */
+    .modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 999; }
+    .modal { background: white; border-radius: 12px; padding: 25px; width: 350px; text-align: center; }
+    .modal input, .modal select { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; }
   </style>
 </head>
 <body>
+
+  <!-- 左側：会員情報＆チャージ -->
   <div class="left-panel">
     <div class="status-card" id="memberStatus">
       <h3 style="margin:0; color:#6b7280;">スキャン待機中</h3>
@@ -38,14 +61,39 @@
       <button class="btn" onclick="chargeChips(500)">+ 500 枚</button>
     </div>
   </div>
+
+  <!-- 右側：商品＆カート -->
   <div class="right-panel">
-    <h2>商品一覧（減少率順）</h2>
+    <div class="header-row">
+      <h2 style="margin:0;">商品一覧（減少率順）</h2>
+      <button class="restock-btn" onclick="openRestockModal()">📦 在庫を追加する</button>
+    </div>
+    
     <div class="product-grid" id="productGrid"></div>
+
     <div class="cart-section">
+      <h3 style="margin:0 0 8px 0; font-size:16px;">選択中の商品 (カート)</h3>
+      <div class="cart-list" id="cartList">
+        <div style="color:#9ca3af; font-size:14px;">商品が選択されていません</div>
+      </div>
+      
       <div style="margin-bottom:10px; font-weight:bold; font-size:18px;">
         消費チップ合計: <span id="totalCost" style="color:#ef4444;">0</span> 枚
       </div>
       <button class="checkout-btn" id="checkoutBtn" onclick="submitPurchase()" disabled>取引を確定する</button>
+    </div>
+  </div>
+
+  <!-- 在庫補充モーダル -->
+  <div class="modal-overlay" id="restockModal">
+    <div class="modal">
+      <h3>在庫の追加・補充</h3>
+      <select id="restockProductSelect"></select>
+      <input type="number" id="restockAmount" placeholder="追加する数量 (例: 10)" min="1">
+      <div style="display:flex; gap:10px; margin-top:15px;">
+        <button class="btn" style="background:#6b7280; flex:1;" onclick="closeRestockModal()">キャンセル</button>
+        <button class="btn" style="background:#10b981; flex:1;" onclick="submitRestock()">補充実行</button>
+      </div>
     </div>
   </div>
 
@@ -56,8 +104,14 @@
     socket.on('init-data', (data) => { productsList = data.products; renderProducts(); });
     socket.on('member-scanned', (data) => { currentMember = data.member; cart = {}; renderMember(); renderProducts(); });
     socket.on('member-updated', (data) => { currentMember = data.member; renderMember(); });
-    socket.on('data-updated', (data) => { currentMember = data.member; productsList = data.products; cart = {}; renderMember(); renderProducts(); });
-    socket.on('purchase-success', (res) => alert(res.message));
+    socket.on('data-updated', (data) => { 
+      if (data.member) currentMember = data.member; 
+      productsList = data.products; 
+      renderMember(); 
+      renderProducts(); 
+    });
+    socket.on('purchase-success', (res) => { alert(res.message); cart = {}; renderProducts(); });
+    socket.on('toast-message', (res) => alert(res.message));
     socket.on('error-message', (res) => alert(res.message));
 
     function renderMember() {
@@ -71,32 +125,89 @@
       const grid = document.getElementById('productGrid');
       grid.innerHTML = '';
       const sorted = [...productsList].sort((a, b) => b.reductionRate - a.reductionRate);
+      
       sorted.forEach(p => {
-        const isSelected = cart[p.id] > 0;
+        const inCartQty = cart[p.id] || 0;
         const card = document.createElement('div');
-        card.className = `product-card ${isSelected ? 'active' : ''} ${p.currentStock <= 0 ? 'out-of-stock' : ''}`;
-        card.onclick = () => toggleCart(p.id);
+        card.className = `product-card ${inCartQty > 0 ? 'active' : ''} ${p.currentStock <= 0 ? 'out-of-stock' : ''}`;
+        card.onclick = () => addCart(p.id);
         card.innerHTML = `
           <div class="rate-badge">減少率 ${p.reductionRate}%</div>
-          <div style="font-weight:bold; font-size:18px;">${p.name}</div>
-          <div>必要: ${p.price} チップ | 在庫: ${p.currentStock}/${p.initialStock}</div>`;
+          <div>
+            <div style="font-weight:bold; font-size:18px;">${p.name}</div>
+            <div style="color:#4b5563; margin-top:4px;">必要: ${p.price} チップ | 在庫: ${p.currentStock}/${p.initialStock}</div>
+          </div>
+          ${inCartQty > 0 ? `<div style="color:#10b981; font-weight:bold; margin-top:8px;">カート内: ${inCartQty} 個</div>` : ''}
+        `;
         grid.appendChild(card);
       });
-      updateCartTotal();
+      renderCartUI();
     }
 
-    function toggleCart(id) {
+    function addCart(id) {
       if (!currentMember) return alert('会員QRコードを読み取ってください');
-      cart[id] = (cart[id] || 0) + 1;
+      const p = productsList.find(item => item.id === id);
+      if (!p) return;
+      const currentQty = cart[id] || 0;
+      if (currentQty + 1 > p.currentStock) {
+        return alert('これ以上在庫がありません');
+      }
+      cart[id] = currentQty + 1;
       renderProducts();
     }
 
-    function updateCartTotal() {
+    function changeQty(id, delta) {
+      if (!cart[id]) return;
+      const p = productsList.find(item => item.id === id);
+      const newQty = cart[id] + delta;
+      
+      if (delta > 0 && newQty > p.currentStock) {
+        return alert('これ以上在庫がありません');
+      }
+
+      if (newQty <= 0) {
+        delete cart[id];
+      } else {
+        cart[id] = newQty;
+      }
+      renderProducts();
+    }
+
+    function removeCartItem(id) {
+      delete cart[id];
+      renderProducts();
+    }
+
+    function renderCartUI() {
+      const list = document.getElementById('cartList');
+      list.innerHTML = '';
       let total = 0;
-      Object.keys(cart).forEach(id => {
-        const p = productsList.find(prod => prod.id === id);
-        if (p) total += p.price * cart[id];
-      });
+      const keys = Object.keys(cart);
+
+      if (keys.length === 0) {
+        list.innerHTML = '<div style="color:#9ca3af; font-size:14px;">商品が選択されていません</div>';
+      } else {
+        keys.forEach(id => {
+          const p = productsList.find(prod => prod.id === id);
+          if (p) {
+            const qty = cart[id];
+            total += p.price * qty;
+            const itemDiv = document.createElement('div');
+            itemDiv.className = 'cart-item';
+            itemDiv.innerHTML = `
+              <div><strong>${p.name}</strong> (${p.price}枚 × ${qty})</div>
+              <div class="cart-controls">
+                <button class="qty-btn btn-minus" onclick="changeQty('${id}', -1)">-</button>
+                <span>${qty}</span>
+                <button class="qty-btn btn-plus" onclick="changeQty('${id}', 1)">+</button>
+                <button class="qty-btn btn-del" onclick="removeCartItem('${id}')">削除</button>
+              </div>
+            `;
+            list.appendChild(itemDiv);
+          }
+        });
+      }
+
       document.getElementById('totalCost').innerText = total;
       document.getElementById('checkoutBtn').disabled = !currentMember || total === 0;
     }
@@ -110,6 +221,33 @@
       if (!currentMember) return;
       const cartItems = Object.keys(cart).map(id => ({ id, quantity: cart[id] }));
       socket.emit('purchase-items', { memberId: currentMember.id, cartItems });
+    }
+
+    // モーダル関連
+    function openRestockModal() {
+      const select = document.getElementById('restockProductSelect');
+      select.innerHTML = '';
+      productsList.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.innerText = `${p.name} (現在の在庫: ${p.currentStock})`;
+        select.appendChild(opt);
+      });
+      document.getElementById('restockModal').style.display = 'flex';
+    }
+
+    function closeRestockModal() {
+      document.getElementById('restockModal').style.display = 'none';
+      document.getElementById('restockAmount').value = '';
+    }
+
+    function submitRestock() {
+      const productId = document.getElementById('restockProductSelect').value;
+      const amount = parseInt(document.getElementById('restockAmount').value, 10);
+      if (!amount || amount <= 0) return alert('正しく数量を入力してください');
+      
+      socket.emit('restock-item', { productId, amount });
+      closeRestockModal();
     }
   </script>
 </body>

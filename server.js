@@ -8,12 +8,10 @@ const io = new Server(server, { cors: { origin: '*' } });
 
 app.use(express.static('public'));
 
-// UptimeRobotスリープ防止用エンドポイント
 app.get('/ping', (req, res) => {
   res.status(200).send('pong');
 });
 
-// 簡易データベース（メモリ上）
 const members = {
   '0001': { id: '0001', name: '会員 0001', chips: 150 },
   '0002': { id: '0002', name: '会員 0002', chips: 50 },
@@ -55,15 +53,36 @@ io.on('connection', (socket) => {
     }
   });
 
+  // 在庫補充の処理
+  socket.on('restock-item', ({ productId, amount }) => {
+    const p = products.find(prod => prod.id === productId);
+    if (p && amount > 0) {
+      p.currentStock += amount;
+      p.initialStock += amount; // 初期在庫（分母）も合わせて更新
+      io.emit('data-updated', { member: null, products: getProductsWithStats() });
+      socket.emit('toast-message', { message: `${p.name} の在庫を ${amount} 個追加しました` });
+    }
+  });
+
   socket.on('purchase-items', ({ memberId, cartItems }) => {
     const member = members[memberId];
     if (!member) return;
 
     let totalCost = 0;
+    let stockError = false;
+
     cartItems.forEach(item => {
       const p = products.find(prod => prod.id === item.id);
-      if (p) totalCost += p.price * item.quantity;
+      if (p) {
+        if (p.currentStock < item.quantity) stockError = true;
+        totalCost += p.price * item.quantity;
+      }
     });
+
+    if (stockError) {
+      socket.emit('error-message', { message: '在庫が不足している商品があります' });
+      return;
+    }
 
     if (member.chips < totalCost) {
       socket.emit('error-message', { message: 'チップが不足しています' });
@@ -73,7 +92,7 @@ io.on('connection', (socket) => {
     member.chips -= totalCost;
     cartItems.forEach(item => {
       const p = products.find(prod => prod.id === item.id);
-      if (p && p.currentStock >= item.quantity) {
+      if (p) {
         p.currentStock -= item.quantity;
       }
     });
