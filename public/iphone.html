@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>iPhone QRスキャナー</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://unpkg.com/html5-qrcode"></script>
+  <style>
+    body { font-family: -apple-system, sans-serif; text-align: center; background: #111827; color: #fff; margin: 0; padding: 20px; }
+    #reader { width: 100%; max-width: 400px; margin: 20px auto; border-radius: 12px; overflow: hidden; background: #000; }
+    .manual-input { margin-top: 20px; display: flex; justify-content: center; gap: 10px; }
+    input { padding: 12px; font-size: 16px; border-radius: 8px; border: none; width: 140px; text-align: center; }
+    button { padding: 12px 20px; font-size: 16px; font-weight: bold; background: #4f46e5; color: white; border: none; border-radius: 8px; }
+    #lastScan { margin-top: 15px; color: #10b981; font-weight: bold; font-size: 18px; }
+  </style>
+</head>
+<body>
+  <h2>会員QRスキャナー</h2>
+  <div id="reader"></div>
+  <div id="lastScan"></div>
+
+  <div class="manual-input">
+    <input type="text" id="manualId" placeholder="ID (例: 0001)">
+    <button onclick="sendManualId()">送信</button>
+  </div>
+
+  <script>
+    const socket = io();
+
+    function onScanSuccess(decodedText) {
+      document.getElementById('lastScan').innerText = `送信完了: ID [ ${decodedText} ]`;
+      socket.emit('scan-qr', { memberId: decodedText });
+      html5QrcodeScanner.pause(true);
+      setTimeout(() => html5QrcodeScanner.resume(), 2000);
+    }
+
+    const html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: { width: 250, height: 250 } }, false);
+    html5QrcodeScanner.render(onScanSuccess);
+
+    function sendManualId() {
+      const id = document.getElementById('manualId').value;
+      if (id) {
+        socket.emit('scan-qr', { memberId: id });
+        document.getElementById('lastScan').innerText = `送信完了: ID [ ${id} ]`;
+        document.getElementById('manualId').value = '';
+      }
+    }
+  </script>
+</body>
+</html>
