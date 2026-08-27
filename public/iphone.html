@@ -2,50 +2,175 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>iPhone QRスキャナー</title>
   <script src="/socket.io/socket.io.js"></script>
-  <script src="https://unpkg.com/html5-qrcode"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr/dist/jsQR.js"></script>
   <style>
-    body { font-family: -apple-system, sans-serif; text-align: center; background: #111827; color: #fff; margin: 0; padding: 20px; }
-    #reader { width: 100%; max-width: 400px; margin: 20px auto; border-radius: 12px; overflow: hidden; background: #000; }
-    .manual-input { margin-top: 20px; display: flex; justify-content: center; gap: 10px; }
-    input { padding: 12px; font-size: 16px; border-radius: 8px; border: none; width: 140px; text-align: center; }
-    button { padding: 12px 20px; font-size: 16px; font-weight: bold; background: #4f46e5; color: white; border: none; border-radius: 8px; }
-    #lastScan { margin-top: 15px; color: #10b981; font-weight: bold; font-size: 18px; }
+    * { box-sizing: border-box; font-family: -apple-system, sans-serif; }
+    body { margin: 0; padding: 0; background: #000; color: #fff; text-align: center; overflow: hidden; }
+    
+    .container { display: flex; flex-direction: column; height: 100vh; justify-content: space-between; padding: 20px 15px; }
+    header h1 { font-size: 20px; margin: 0; color: #10b981; }
+    header p { font-size: 13px; color: #aaa; margin-top: 5px; }
+
+    /* カメラ映像・スキャンエリア */
+    .scanner-container {
+      position: relative;
+      width: 100%;
+      max-width: 360px;
+      height: 360px;
+      margin: 0 auto;
+      border-radius: 16px;
+      overflow: hidden;
+      background: #111;
+      border: 2px solid #333;
+    }
+    video { width: 100%; height: 100%; object-fit: cover; }
+    
+    /* 読み取りフレームガイド */
+    .scan-guide {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 220px; height: 220px;
+      border: 3px solid #10b981;
+      border-radius: 12px;
+      box-shadow: 0 0 0 4000px rgba(0, 0, 0, 0.5);
+      pointer-events: none;
+    }
+
+    /* 結果通知エリア */
+    .result-card {
+      background: #1e293b;
+      border-radius: 12px;
+      padding: 15px;
+      margin-top: 10px;
+      min-height: 80px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .result-text { font-size: 16px; font-weight: bold; color: #38bdf8; word-break: break-all; }
+    
+    .status-tag {
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 12px;
+      background: #334155;
+      color: #94a3b8;
+      margin-bottom: 5px;
+    }
+    .status-tag.active { background: #059669; color: #fff; }
   </style>
 </head>
 <body>
-  <h2>会員QRスキャナー</h2>
-  <div id="reader"></div>
-  <div id="lastScan"></div>
 
-  <div class="manual-input">
-    <input type="text" id="manualId" placeholder="ID (例: 0001)">
-    <button onclick="sendManualId()">送信</button>
+  <div class="container">
+    <header>
+      <h1>会員QRスキャナー</h1>
+      <p>会員証のQRコードを枠内にかざしてください</p>
+    </header>
+
+    <div class="scanner-container">
+      <video id="video" playsinline></video>
+      <canvas id="canvas" hidden></canvas>
+      <div class="scan-guide"></div>
+    </div>
+
+    <div class="result-card">
+      <div id="statusTag" class="status-tag">読み取り開始</div>
+      <div id="resultText" class="result-text">QRコードを読み取ってください</div>
+    </div>
   </div>
 
   <script>
     const socket = io();
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const resultText = document.getElementById('resultText');
+    const statusTag = document.getElementById('statusTag');
 
-    function onScanSuccess(decodedText) {
-      document.getElementById('lastScan').innerText = `送信完了: ID [ ${decodedText} ]`;
-      socket.emit('scan-qr', { memberId: decodedText });
-      html5QrcodeScanner.pause(true);
-      setTimeout(() => html5QrcodeScanner.resume(), 2000);
-    }
+    let isScanning = true;
+    let lastScannedCode = null;
 
-    const html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: { width: 250, height: 250 } }, false);
-    html5QrcodeScanner.render(onScanSuccess);
-
-    function sendManualId() {
-      const id = document.getElementById('manualId').value;
-      if (id) {
-        socket.emit('scan-qr', { memberId: id });
-        document.getElementById('lastScan').innerText = `送信完了: ID [ ${id} ]`;
-        document.getElementById('manualId').value = '';
+    // 背面カメラを直接起動
+    async function startCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { exact: "environment" } }
+        });
+        video.srcObject = stream;
+        video.setAttribute('playsinline', true);
+        video.play();
+        requestAnimationFrame(tick);
+      } catch (err) {
+        try {
+          const fallbackStream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: "environment" }
+          });
+          video.srcObject = fallbackStream;
+          video.setAttribute('playsinline', true);
+          video.play();
+          requestAnimationFrame(tick);
+        } catch (e) {
+          alert('カメラの起動に失敗しました。カメラの利用権限を許可してください。');
+        }
       }
     }
+
+    function tick() {
+      if (video.readyState === video.HAVE_ENOUGH_DATA) {
+        canvas.height = video.videoHeight;
+        canvas.width = video.videoWidth;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(imageData.data, imageData.width, imageData.height, {
+          inversionAttempts: "dontInvert",
+        });
+
+        if (code && isScanning) {
+          if (code.data !== lastScannedCode) {
+            onCodeScanned(code.data);
+          }
+        }
+      }
+      requestAnimationFrame(tick);
+    }
+
+    function onCodeScanned(scannedData) {
+      isScanning = false;
+      lastScannedCode = scannedData;
+
+      statusTag.innerText = "読み取り完了！";
+      statusTag.classList.add('active');
+      resultText.innerText = `会員ID: ${scannedData}`;
+
+      // iPadへSocket.ioで送信
+      socket.emit('scan-qr', { memberId: scannedData });
+
+      // バイブレーション（対応端末のみ）
+      if (navigator.vibrate) navigator.vibrate(100);
+    }
+
+    // 取引完了イベントを受け取ったらスキャン待機状態（読み取り開始）に戻す
+    socket.on('transaction-completed', () => {
+      resetToWaitState();
+    });
+
+    function resetToWaitState() {
+      isScanning = true;
+      lastScannedCode = null;
+      statusTag.innerText = "読み取り開始";
+      statusTag.classList.remove('active');
+      resultText.innerText = "QRコードを読み取ってください";
+    }
+
+    // 画面ロード時にカメラ起動
+    window.addEventListener('load', startCamera);
   </script>
 </body>
 </html>

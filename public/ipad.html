@@ -11,23 +11,36 @@
     
     /* 左パネル */
     .left-panel { flex: 1; background: #fff; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; overflow-y: auto; }
-    .status-card { background: #eef2ff; border: 2px solid #6366f1; border-radius: 10px; padding: 15px; text-align: center; margin-bottom: 20px; }
-    .chip-badge { font-size: 32px; font-weight: bold; color: #4f46e5; margin: 10px 0; }
-    .btn-group { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
-    .btn { padding: 15px; font-size: 18px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; background: #4f46e5; color: #fff; }
+    .status-card { background: #eef2ff; border: 2px solid #6366f1; border-radius: 10px; padding: 15px; text-align: center; margin-bottom: 15px; }
+    .chip-badge { font-size: 32px; font-weight: bold; color: #4f46e5; margin: 5px 0; }
+    .btn-group { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 15px; }
+    .btn { padding: 12px; font-size: 16px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; background: #4f46e5; color: #fff; }
+    
+    /* 履歴エリア */
+    .history-section { border-top: 2px solid #e5e7eb; padding-top: 10px; flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    .history-list { flex: 1; overflow-y: auto; background: #fafafa; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px; font-size: 13px; }
+    .history-item { background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px; margin-bottom: 6px; }
+    .history-time { color: #6b7280; font-size: 11px; margin-bottom: 2px; }
     
     /* 右パネル */
     .right-panel { flex: 2; background: #fff; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; }
     .header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    
+    /* カテゴリタブ */
+    .category-tabs { display: flex; gap: 8px; margin-bottom: 12px; overflow-x: auto; padding-bottom: 4px; }
+    .tab-btn { padding: 8px 16px; border: 1px solid #d1d5db; border-radius: 20px; background: #f3f4f6; cursor: pointer; font-weight: bold; font-size: 14px; white-space: nowrap; }
+    .tab-btn.active { background: #4f46e5; color: white; border-color: #4f46e5; }
+
     .product-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 15px; flex: 1; overflow-y: auto; }
     .product-card { border: 2px solid #e5e7eb; border-radius: 10px; padding: 12px; cursor: pointer; position: relative; background: #fafafa; display: flex; flex-direction: column; justify-content: space-between; }
     .product-card.active { border-color: #10b981; background: #ecfdf5; }
     .product-card.out-of-stock { opacity: 0.5; }
+    .category-tag { font-size: 11px; font-weight: bold; color: #6b7280; background: #e5e7eb; padding: 2px 6px; border-radius: 4px; display: inline-block; margin-bottom: 4px; }
     .rate-badge { position: absolute; top: 10px; right: 10px; background: #ef4444; color: #fff; font-size: 12px; font-weight: bold; padding: 4px 8px; border-radius: 12px; }
     
     /* カートエリア */
     .cart-section { border-top: 2px solid #e5e7eb; padding-top: 15px; }
-    .cart-list { max-height: 120px; overflow-y: auto; margin-bottom: 10px; }
+    .cart-list { max-height: 110px; overflow-y: auto; margin-bottom: 10px; }
     .cart-item { display: flex; justify-content: space-between; align-items: center; background: #f3f4f6; padding: 8px 12px; border-radius: 6px; margin-bottom: 6px; }
     .cart-controls { display: flex; align-items: center; gap: 8px; }
     .qty-btn { width: 28px; height: 28px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; }
@@ -39,7 +52,7 @@
     .checkout-btn { width: 100%; padding: 18px; font-size: 22px; font-weight: bold; background: #10b981; color: white; border: none; border-radius: 10px; cursor: pointer; }
     .checkout-btn:disabled { background: #9ca3af; cursor: not-allowed; }
 
-    /* モーダル表示 */
+    /* モーダル */
     .modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 999; }
     .modal { background: white; border-radius: 12px; padding: 25px; width: 350px; text-align: center; }
     .modal input, .modal select { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; }
@@ -47,40 +60,58 @@
 </head>
 <body>
 
-  <!-- 左側：会員情報＆チャージ -->
+  <!-- 左側：会員情報・チャージ・購入履歴 -->
   <div class="left-panel">
     <div class="status-card" id="memberStatus">
       <h3 style="margin:0; color:#6b7280;">スキャン待機中</h3>
       <p style="margin:5px 0 0 0; font-size:14px; color:#9ca3af;">iPhoneで会員QRコードを読み取ってください</p>
     </div>
-    <h3>チップチャージ</h3>
+    
+    <h3 style="margin: 0 0 8px 0;">チップチャージ</h3>
     <div class="btn-group">
       <button class="btn" onclick="chargeChips(10)">+ 10 枚</button>
       <button class="btn" onclick="chargeChips(50)">+ 50 枚</button>
       <button class="btn" onclick="chargeChips(100)">+ 100 枚</button>
       <button class="btn" onclick="chargeChips(500)">+ 500 枚</button>
     </div>
+
+    <!-- 購入履歴エリア -->
+    <div class="history-section">
+      <h3 style="margin:0 0 8px 0;">購入履歴</h3>
+      <div class="history-list" id="historyList">
+        <div style="color:#9ca3af; text-align:center; margin-top:20px;">会員コードを読み取ると履歴が表示されます</div>
+      </div>
+    </div>
   </div>
 
   <!-- 右側：商品＆カート -->
   <div class="right-panel">
     <div class="header-row">
-      <h2 style="margin:0;">商品一覧（減少率順）</h2>
+      <h2 style="margin:0;">景品一覧</h2>
       <button class="restock-btn" onclick="openRestockModal()">📦 在庫を追加する</button>
+    </div>
+
+    <!-- カテゴリ選択タブ -->
+    <div class="category-tabs">
+      <button class="tab-btn active" onclick="filterCategory('すべて')">すべて</button>
+      <button class="tab-btn" onclick="filterCategory('お菓子')">お菓子</button>
+      <button class="tab-btn" onclick="filterCategory('ドリンク')">ドリンク</button>
+      <button class="tab-btn" onclick="filterCategory('おもちゃ')">おもちゃ</button>
+      <button class="tab-btn" onclick="filterCategory('イベント景品')">イベント景品</button>
     </div>
     
     <div class="product-grid" id="productGrid"></div>
 
     <div class="cart-section">
-      <h3 style="margin:0 0 8px 0; font-size:16px;">選択中の商品 (カート)</h3>
+      <h3 style="margin:0 0 8px 0; font-size:16px;">選択中の景品 (カート)</h3>
       <div class="cart-list" id="cartList">
-        <div style="color:#9ca3af; font-size:14px;">商品が選択されていません</div>
+        <div style="color:#9ca3af; font-size:14px;">景品が選択されていません</div>
       </div>
       
       <div style="margin-bottom:10px; font-weight:bold; font-size:18px;">
         消費チップ合計: <span id="totalCost" style="color:#ef4444;">0</span> 枚
       </div>
-      <button class="checkout-btn" id="checkoutBtn" onclick="submitPurchase()" disabled>取引を確定する</button>
+      <button class="checkout-btn" id="checkoutBtn" onclick="submitPurchase()" disabled>交換を確定する</button>
     </div>
   </div>
 
@@ -99,7 +130,7 @@
 
   <script>
     const socket = io();
-    let currentMember = null, productsList = [], cart = {};
+    let currentMember = null, productsList = [], cart = {}, selectedCategory = 'すべて';
 
     socket.on('init-data', (data) => { productsList = data.products; renderProducts(); });
     socket.on('member-scanned', (data) => { currentMember = data.member; cart = {}; renderMember(); renderProducts(); });
@@ -114,17 +145,49 @@
     socket.on('toast-message', (res) => alert(res.message));
     socket.on('error-message', (res) => alert(res.message));
 
+    function filterCategory(cat) {
+      selectedCategory = cat;
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.innerText === cat);
+      });
+      renderProducts();
+    }
+
     function renderMember() {
       if (!currentMember) return;
       document.getElementById('memberStatus').innerHTML = `
-        <h2>${currentMember.name} (ID: ${currentMember.id})</h2>
-        <div>現在の所持チップ</div><div class="chip-badge">${currentMember.chips} 枚</div>`;
+        <h2 style="margin:0;">${currentMember.name} (ID: ${currentMember.id})</h2>
+        <div style="margin-top:5px; font-size:14px; color:#4b5563;">現在の所持チップ</div>
+        <div class="chip-badge">${currentMember.chips} 枚</div>`;
+
+      const hList = document.getElementById('historyList');
+      hList.innerHTML = '';
+      if (!currentMember.history || currentMember.history.length === 0) {
+        hList.innerHTML = '<div style="color:#9ca3af; text-align:center; padding:10px;">購入履歴はありません</div>';
+      } else {
+        currentMember.history.forEach(h => {
+          const itemDiv = document.createElement('div');
+          itemDiv.className = 'history-item';
+          itemDiv.innerHTML = `
+            <div class="history-time">⏰ ${h.time}</div>
+            <div style="font-weight:bold; color:#111827;">${h.items}</div>
+            <div style="color:#ef4444; font-weight:bold; text-align:right; margin-top:2px;">-${h.cost} チップ</div>
+          `;
+          hList.appendChild(itemDiv);
+        });
+      }
     }
 
     function renderProducts() {
       const grid = document.getElementById('productGrid');
       grid.innerHTML = '';
-      const sorted = [...productsList].sort((a, b) => b.reductionRate - a.reductionRate);
+
+      // カテゴリ絞り込み & 減少率順にソート
+      let filtered = productsList;
+      if (selectedCategory !== 'すべて') {
+        filtered = filtered.filter(p => p.category === selectedCategory);
+      }
+      const sorted = [...filtered].sort((a, b) => b.reductionRate - a.reductionRate);
       
       sorted.forEach(p => {
         const inCartQty = cart[p.id] || 0;
@@ -134,6 +197,7 @@
         card.innerHTML = `
           <div class="rate-badge">減少率 ${p.reductionRate}%</div>
           <div>
+            <span class="category-tag">${p.category}</span>
             <div style="font-weight:bold; font-size:18px;">${p.name}</div>
             <div style="color:#4b5563; margin-top:4px;">必要: ${p.price} チップ | 在庫: ${p.currentStock}/${p.initialStock}</div>
           </div>
@@ -185,7 +249,7 @@
       const keys = Object.keys(cart);
 
       if (keys.length === 0) {
-        list.innerHTML = '<div style="color:#9ca3af; font-size:14px;">商品が選択されていません</div>';
+        list.innerHTML = '<div style="color:#9ca3af; font-size:14px;">景品が選択されていません</div>';
       } else {
         keys.forEach(id => {
           const p = productsList.find(prod => prod.id === id);
@@ -223,14 +287,13 @@
       socket.emit('purchase-items', { memberId: currentMember.id, cartItems });
     }
 
-    // モーダル関連
     function openRestockModal() {
       const select = document.getElementById('restockProductSelect');
       select.innerHTML = '';
       productsList.forEach(p => {
         const opt = document.createElement('option');
         opt.value = p.id;
-        opt.innerText = `${p.name} (現在の在庫: ${p.currentStock})`;
+        opt.innerText = `[${p.category}] ${p.name} (在庫: ${p.currentStock})`;
         select.appendChild(opt);
       });
       document.getElementById('restockModal').style.display = 'flex';
