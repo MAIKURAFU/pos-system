@@ -195,8 +195,16 @@
     const socket = io();
     let currentMember = null, productsList = [], cart = {}, selectedCategory = 'すべて';
 
+    // ★ここで data.member を正しく受け取るように修正済み
     socket.on('init-data', (data) => { productsList = data.products; renderProducts(); });
-    socket.on('member-scanned', (data) => { currentMember = data.member; cart = {}; renderMember(); renderProducts(); });
+    socket.on('member-scanned', (data) => { 
+      if (data && data.member) {
+        currentMember = data.member; 
+        cart = {}; 
+        renderMember(); 
+        renderProducts(); 
+      }
+    });
     socket.on('member-updated', (data) => { currentMember = data.member; renderMember(); });
     socket.on('data-updated', (data) => { 
       if (data.member) currentMember = data.member; 
@@ -207,13 +215,12 @@
 
     socket.on('purchase-success', (res) => { 
       alert(res.message); 
-      clearMemberSilently(); // 会員選択を終了して初期状態に戻す
+      clearMemberSilently(); 
     });
 
     socket.on('toast-message', (res) => alert(res.message));
     socket.on('error-message', (res) => alert(res.message));
 
-    // 会員選択解除処理
     function clearMember() {
       if (Object.keys(cart).length > 0) {
         if (!confirm('カートに商品が入っています。選択を解除してカートをリセットしますか？')) {
@@ -251,13 +258,10 @@
           <p style="margin:5px 0 0 0; font-size:14px; color:#9ca3af;">iPhoneで会員QRコードを読み取ってください</p>`;
         
         hList.innerHTML = '<div style="color:#9ca3af; text-align:center; margin-top:20px;">会員コードを読み取ると履歴が表示されます</div>';
-        
-        // 会員がいない時はチャージボタンを無効化
         chargeBtns.forEach(btn => btn.disabled = true);
         return;
       }
 
-      // 会員選択時
       chargeBtns.forEach(btn => btn.disabled = false);
       statusDiv.className = 'status-card active';
       statusDiv.setAttribute('onclick', 'openMemberHistoryModal()');
@@ -396,7 +400,6 @@
       socket.emit('purchase-items', { memberId: currentMember.id, cartItems });
     }
 
-    /* モーダル操作系 */
     function closeModal(id) {
       document.getElementById(id).style.display = 'none';
     }
@@ -423,7 +426,6 @@
       document.getElementById('restockAmount').value = '';
     }
 
-    /* 商品編集モーダル */
     function openEditModal(productId) {
       const p = productsList.find(item => item.id === productId);
       if (!p) return;
@@ -450,7 +452,6 @@
       closeModal('editProductModal');
     }
 
-    /* 会員詳細・購入履歴表示モーダル */
     function openMemberHistoryModal() {
       if (!currentMember) return;
 
