@@ -90,6 +90,23 @@ io.on('connection', (socket) => {
     }
   });
 
+  // 商品設定（名前・必要チップ数・在庫数）の更新
+  socket.on('update-product', ({ productId, name, price, currentStock }) => {
+    const p = products.find(prod => prod.id === productId);
+    if (p) {
+      p.name = name;
+      p.price = price;
+      // 現在在庫に合わせて初期在庫（計算用）を自動調整
+      if (currentStock > p.initialStock) {
+        p.initialStock = currentStock;
+      }
+      p.currentStock = currentStock;
+
+      io.emit('data-updated', { member: null, products: getProductsWithStats() });
+      socket.emit('toast-message', { message: `${p.name} の設定を更新しました` });
+    }
+  });
+
   socket.on('purchase-items', ({ memberId, cartItems }) => {
     const member = members[memberId];
     if (!member) return;
@@ -137,8 +154,6 @@ io.on('connection', (socket) => {
 
     io.emit('data-updated', { member, products: getProductsWithStats() });
     socket.emit('purchase-success', { message: '取引が完了しました' });
-    
-    // 全クライアント（iPhone含む）に取引確定を通知
     io.emit('transaction-completed');
   });
 });
