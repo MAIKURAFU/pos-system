@@ -11,11 +11,31 @@
     
     /* 左パネル */
     .left-panel { flex: 1; background: #fff; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; overflow-y: auto; }
-    .status-card { background: #eef2ff; border: 2px solid #6366f1; border-radius: 10px; padding: 15px; text-align: center; margin-bottom: 15px; cursor: pointer; transition: transform 0.1s, background 0.2s; }
-    .status-card:active { transform: scale(0.98); background: #e0e7ff; }
+    .status-card { background: #eef2ff; border: 2px solid #6366f1; border-radius: 10px; padding: 15px; text-align: center; margin-bottom: 15px; position: relative; }
+    .status-card.active { cursor: pointer; transition: transform 0.1s, background 0.2s; }
+    .status-card.active:active { transform: scale(0.98); background: #e0e7ff; }
+    
+    /* 選択解除ボタン */
+    .clear-member-btn {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: #ef4444;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 4px 8px;
+      font-size: 12px;
+      font-weight: bold;
+      cursor: pointer;
+      z-index: 10;
+    }
+    .clear-member-btn:hover { background: #dc2626; }
+
     .chip-badge { font-size: 32px; font-weight: bold; color: #4f46e5; margin: 5px 0; }
     .btn-group { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 15px; }
     .btn { padding: 12px; font-size: 16px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; background: #4f46e5; color: #fff; }
+    .btn:disabled { background: #9ca3af; cursor: not-allowed; }
     
     /* 履歴エリア */
     .history-section { border-top: 2px solid #e5e7eb; padding-top: 10px; flex: 1; display: flex; flex-direction: column; overflow: hidden; }
@@ -68,17 +88,17 @@
 
   <!-- 左側：会員情報・チャージ・購入履歴 -->
   <div class="left-panel">
-    <div class="status-card" id="memberStatus" onclick="openMemberHistoryModal()">
+    <div class="status-card" id="memberStatus">
       <h3 style="margin:0; color:#6b7280;">スキャン待機中</h3>
       <p style="margin:5px 0 0 0; font-size:14px; color:#9ca3af;">iPhoneで会員QRコードを読み取ってください</p>
     </div>
     
     <h3 style="margin: 0 0 8px 0;">チップチャージ</h3>
     <div class="btn-group">
-      <button class="btn" onclick="chargeChips(10)">+ 10 枚</button>
-      <button class="btn" onclick="chargeChips(50)">+ 50 枚</button>
-      <button class="btn" onclick="chargeChips(100)">+ 100 枚</button>
-      <button class="btn" onclick="chargeChips(500)">+ 500 枚</button>
+      <button class="btn charge-btn" onclick="chargeChips(10)" disabled>+ 10 枚</button>
+      <button class="btn charge-btn" onclick="chargeChips(50)" disabled>+ 50 枚</button>
+      <button class="btn charge-btn" onclick="chargeChips(100)" disabled>+ 100 枚</button>
+      <button class="btn charge-btn" onclick="chargeChips(500)" disabled>+ 500 枚</button>
     </div>
 
     <!-- 購入履歴エリア -->
@@ -184,9 +204,31 @@
       renderMember(); 
       renderProducts(); 
     });
-    socket.on('purchase-success', (res) => { alert(res.message); cart = {}; renderProducts(); });
+
+    socket.on('purchase-success', (res) => { 
+      alert(res.message); 
+      clearMemberSilently(); // 会員選択を終了して初期状態に戻す
+    });
+
     socket.on('toast-message', (res) => alert(res.message));
     socket.on('error-message', (res) => alert(res.message));
+
+    // 会員選択解除処理
+    function clearMember() {
+      if (Object.keys(cart).length > 0) {
+        if (!confirm('カートに商品が入っています。選択を解除してカートをリセットしますか？')) {
+          return;
+        }
+      }
+      clearMemberSilently();
+    }
+
+    function clearMemberSilently() {
+      currentMember = null;
+      cart = {};
+      renderMember();
+      renderProducts();
+    }
 
     function filterCategory(cat) {
       selectedCategory = cat;
@@ -198,20 +240,34 @@
 
     function renderMember() {
       const statusDiv = document.getElementById('memberStatus');
+      const hList = document.getElementById('historyList');
+      const chargeBtns = document.querySelectorAll('.charge-btn');
+
       if (!currentMember) {
+        statusDiv.className = 'status-card';
+        statusDiv.removeAttribute('onclick');
         statusDiv.innerHTML = `
           <h3 style="margin:0; color:#6b7280;">スキャン待機中</h3>
           <p style="margin:5px 0 0 0; font-size:14px; color:#9ca3af;">iPhoneで会員QRコードを読み取ってください</p>`;
+        
+        hList.innerHTML = '<div style="color:#9ca3af; text-align:center; margin-top:20px;">会員コードを読み取ると履歴が表示されます</div>';
+        
+        // 会員がいない時はチャージボタンを無効化
+        chargeBtns.forEach(btn => btn.disabled = true);
         return;
       }
 
+      // 会員選択時
+      chargeBtns.forEach(btn => btn.disabled = false);
+      statusDiv.className = 'status-card active';
+      statusDiv.setAttribute('onclick', 'openMemberHistoryModal()');
       statusDiv.innerHTML = `
+        <button class="clear-member-btn" onclick="event.stopPropagation(); clearMember();">✕ 選択解除</button>
         <h2 style="margin:0; text-decoration: underline;">${currentMember.name} (ID: ${currentMember.id})</h2>
         <div style="margin-top:5px; font-size:12px; color:#6366f1;">👆 タップで全履歴を表示</div>
         <div style="margin-top:5px; font-size:14px; color:#4b5563;">現在の所持チップ</div>
         <div class="chip-badge">${currentMember.chips} 枚</div>`;
 
-      const hList = document.getElementById('historyList');
       hList.innerHTML = '';
       if (!currentMember.history || currentMember.history.length === 0) {
         hList.innerHTML = '<div style="color:#9ca3af; text-align:center; padding:10px;">購入履歴はありません</div>';
@@ -394,7 +450,7 @@
       closeModal('editProductModal');
     }
 
-    /* 会員全履歴モーダル */
+    /* 会員詳細・購入履歴表示モーダル */
     function openMemberHistoryModal() {
       if (!currentMember) return;
 

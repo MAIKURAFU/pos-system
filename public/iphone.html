@@ -63,6 +63,18 @@
       margin-bottom: 5px;
     }
     .status-tag.active { background: #059669; color: #fff; }
+
+    /* リセット（連続スキャン）用手動ボタン */
+    .reset-btn {
+      margin-top: 8px;
+      background: #475569;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 6px 12px;
+      font-size: 12px;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
@@ -82,6 +94,7 @@
     <div class="result-card">
       <div id="statusTag" class="status-tag">読み取り開始</div>
       <div id="resultText" class="result-text">QRコードを読み取ってください</div>
+      <button id="resetBtn" class="reset-btn" style="display:none;" onclick="resetToWaitState()">次のQRを読み取る</button>
     </div>
   </div>
 
@@ -92,6 +105,7 @@
     const ctx = canvas.getContext('2d');
     const resultText = document.getElementById('resultText');
     const statusTag = document.getElementById('statusTag');
+    const resetBtn = document.getElementById('resetBtn');
 
     let isScanning = true;
     let lastScannedCode = null;
@@ -145,20 +159,29 @@
       isScanning = false;
       lastScannedCode = scannedData;
 
-      statusTag.innerText = "読み取り完了！";
+      statusTag.innerText = "送信完了！";
       statusTag.classList.add('active');
       resultText.innerText = `会員ID: ${scannedData}`;
+      resetBtn.style.display = 'inline-block';
 
-      // iPadへSocket.ioで送信
-      socket.emit('scan-qr', { memberId: scannedData });
+      // サーバー側イベント名（scan-member）へ送信
+      socket.emit('scan-member', scannedData);
 
       // バイブレーション（対応端末のみ）
       if (navigator.vibrate) navigator.vibrate(100);
     }
 
-    // 取引完了イベントを受け取ったらスキャン待機状態（読み取り開始）に戻す
-    socket.on('transaction-completed', () => {
+    // 会員情報が存在しない場合などのエラーハンドリング
+    socket.on('error-message', (res) => {
+      alert(res.message);
       resetToWaitState();
+    });
+
+    // 交換完了やデータの更新（iPadでの選択解除等）を検知したらスキャン待機状態に戻す
+    socket.on('data-updated', (data) => {
+      if (!data.member) {
+        resetToWaitState();
+      }
     });
 
     function resetToWaitState() {
@@ -167,6 +190,7 @@
       statusTag.innerText = "読み取り開始";
       statusTag.classList.remove('active');
       resultText.innerText = "QRコードを読み取ってください";
+      resetBtn.style.display = 'none';
     }
 
     // 画面ロード時にカメラ起動
