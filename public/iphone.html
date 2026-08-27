@@ -164,8 +164,8 @@
       resultText.innerText = `会員ID: ${scannedData}`;
       resetBtn.style.display = 'inline-block';
 
-      // サーバー側イベント名（scan-member）へ送信
-      socket.emit('scan-member', scannedData);
+      // サーバー側の期待するイベント名 'scan-qr' に修正
+      socket.emit('scan-qr', { memberId: scannedData });
 
       // バイブレーション（対応端末のみ）
       if (navigator.vibrate) navigator.vibrate(100);
