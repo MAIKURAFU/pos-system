@@ -63,20 +63,38 @@ function getProductsWithStats() {
 io.on('connection', (socket) => {
   socket.emit('init-data', { products: getProductsWithStats() });
 
+  // QRスキャン時の処理
   socket.on('scan-qr', (data) => {
-    const memberId = data.memberId;
+    const memberId = data.memberId ? String(data.memberId).trim() : null;
+    if (!memberId) return;
+
     let member = members[memberId];
     if (!member) {
       member = { id: memberId, name: `新規会員 ${memberId}`, chips: 0, history: [] };
       members[memberId] = member;
     }
+    // 全ての接続クライアント（iPad含む）に会員スキャンを通知
     io.emit('member-scanned', { member });
+    console.log(`会員スキャン検知: ID ${memberId} (${member.name})`);
   });
 
   socket.on('charge-chips', ({ memberId, amount }) => {
-    if (members[memberId]) {
-      members[memberId].chips += amount;
-      io.emit('member-updated', { member: members[memberId] });
+    const member = members[memberId];
+    if (member) {
+      member.chips += amount;
+      
+      const now = new Date();
+      const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+      
+      if (!member.history) member.history = [];
+      member.history.unshift({
+        time: timeStr,
+        items: `チップチャージ (+${amount}枚)`,
+        cost: -amount // チャージはマイナス表示（あるいは別表現）
+      });
+
+      // 全クライアントに会員情報の更新を通知
+      io.emit('member-updated', { member });
     }
   });
 
@@ -96,7 +114,6 @@ io.on('connection', (socket) => {
     if (p) {
       p.name = name;
       p.price = price;
-      // 現在在庫に合わせて初期在庫（計算用）を自動調整
       if (currentStock > p.initialStock) {
         p.initialStock = currentStock;
       }
