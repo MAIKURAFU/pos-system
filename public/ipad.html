@@ -2,481 +2,206 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>iPad レジ & チップ管理</title>
+  <title>レジ画面（iPad）</title>
   <script src="/socket.io/socket.io.js"></script>
   <style>
-    * { box-sizing: border-box; font-family: -apple-system, sans-serif; }
-    body { margin: 0; padding: 15px; background: #f4f6f9; display: flex; gap: 15px; height: 100vh; }
-    
-    /* 左パネル */
-    .left-panel { flex: 1; background: #fff; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; overflow-y: auto; }
-    .status-card { background: #eef2ff; border: 2px solid #6366f1; border-radius: 10px; padding: 15px; text-align: center; margin-bottom: 15px; position: relative; }
-    .status-card.active { cursor: pointer; transition: transform 0.1s, background 0.2s; }
-    .status-card.active:active { transform: scale(0.98); background: #e0e7ff; }
-    
-    /* 選択解除ボタン */
-    .clear-member-btn {
-      position: absolute;
-      top: 8px;
-      right: 8px;
-      background: #ef4444;
-      color: white;
-      border: none;
-      border-radius: 6px;
-      padding: 4px 8px;
-      font-size: 12px;
-      font-weight: bold;
-      cursor: pointer;
-      z-index: 10;
+    body { font-family: sans-serif; display: flex; margin: 0; height: 100vh; }
+    .left-panel, .right-panel { padding: 20px; box-sizing: border-box; }
+    .left-panel { width: 60%; background-color: #f4f4f4; overflow-y: auto; }
+    .right-panel { width: 40%; background-color: #fff; border-left: 1px solid #ccc; }
+    .product-list { display: flex; flex-wrap: wrap; gap: 10px; }
+    .product-card { 
+      background: white; border: 1px solid #ddd; padding: 10px; border-radius: 5px; 
+      width: calc(33% - 10px); cursor: pointer; text-align: center;
     }
-    .clear-member-btn:hover { background: #dc2626; }
-
-    .chip-badge { font-size: 32px; font-weight: bold; color: #4f46e5; margin: 5px 0; }
-    .btn-group { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 15px; }
-    .btn { padding: 12px; font-size: 16px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; background: #4f46e5; color: #fff; }
-    .btn:disabled { background: #9ca3af; cursor: not-allowed; }
-    
-    /* 履歴エリア */
-    .history-section { border-top: 2px solid #e5e7eb; padding-top: 10px; flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-    .history-list { flex: 1; overflow-y: auto; background: #fafafa; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px; font-size: 13px; }
-    .history-item { background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px; margin-bottom: 6px; }
-    .history-time { color: #6b7280; font-size: 11px; margin-bottom: 2px; }
-    
-    /* 右パネル */
-    .right-panel { flex: 2; background: #fff; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; }
-    .header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-    
-    /* カテゴリタブ */
-    .category-tabs { display: flex; gap: 8px; margin-bottom: 12px; overflow-x: auto; padding-bottom: 4px; }
-    .tab-btn { padding: 8px 16px; border: 1px solid #d1d5db; border-radius: 20px; background: #f3f4f6; cursor: pointer; font-weight: bold; font-size: 14px; white-space: nowrap; }
-    .tab-btn.active { background: #4f46e5; color: white; border-color: #4f46e5; }
-
-    .product-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 15px; flex: 1; overflow-y: auto; }
-    .product-card { border: 2px solid #e5e7eb; border-radius: 10px; padding: 12px; cursor: pointer; position: relative; background: #fafafa; display: flex; flex-direction: column; justify-content: space-between; }
-    .product-card.active { border-color: #10b981; background: #ecfdf5; }
-    .product-card.out-of-stock { opacity: 0.6; }
-    .category-tag { font-size: 11px; font-weight: bold; color: #6b7280; background: #e5e7eb; padding: 2px 6px; border-radius: 4px; display: inline-block; margin-bottom: 4px; }
-    .rate-badge { position: absolute; top: 10px; right: 10px; background: #ef4444; color: #fff; font-size: 12px; font-weight: bold; padding: 4px 8px; border-radius: 12px; }
-    
-    .edit-item-btn { margin-top: 6px; background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 4px; padding: 4px 8px; font-size: 12px; cursor: pointer; color: #374151; font-weight: bold; width: fit-content; }
-    .edit-item-btn:hover { background: #e5e7eb; }
-
-    /* カートエリア */
-    .cart-section { border-top: 2px solid #e5e7eb; padding-top: 15px; }
-    .cart-list { max-height: 110px; overflow-y: auto; margin-bottom: 10px; }
-    .cart-item { display: flex; justify-content: space-between; align-items: center; background: #f3f4f6; padding: 8px 12px; border-radius: 6px; margin-bottom: 6px; }
-    .cart-controls { display: flex; align-items: center; gap: 8px; }
-    .qty-btn { width: 28px; height: 28px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; }
-    .btn-minus { background: #f59e0b; color: white; }
-    .btn-plus { background: #10b981; color: white; }
-    .btn-del { background: #ef4444; color: white; font-size: 12px; padding: 0 6px; height: 28px; }
-
-    .restock-btn { background: #0b9f6e; color: white; border: none; padding: 8px 12px; border-radius: 6px; cursor: pointer; font-weight: bold; }
-    .checkout-btn { width: 100%; padding: 18px; font-size: 22px; font-weight: bold; background: #10b981; color: white; border: none; border-radius: 10px; cursor: pointer; }
-    .checkout-btn:disabled { background: #9ca3af; cursor: not-allowed; }
-
-    /* モーダル */
-    .modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 999; }
-    .modal { background: white; border-radius: 12px; padding: 25px; width: 400px; max-width: 90%; }
-    .modal h3 { margin-top: 0; }
-    .modal label { font-size: 12px; font-weight: bold; color: #4b5563; display: block; margin-top: 10px; text-align: left; }
-    .modal input, .modal select { width: 100%; padding: 10px; margin-top: 4px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; }
+    .product-card:active { background: #eee; }
+    .member-info { margin-bottom: 20px; padding: 15px; background: #e3f2fd; border-radius: 8px; }
+    .cart-list { border-top: 1px solid #eee; padding-top: 10px; margin-top: 10px; }
+    .cart-item { display: flex; justify-content: space-between; margin-bottom: 5px; }
+    button { padding: 10px; cursor: pointer; border: none; border-radius: 5px; background: #007bff; color: white; width: 100%; font-size: 16px; margin-top: 10px;}
+    button:disabled { background: #ccc; cursor: not-allowed; }
   </style>
 </head>
 <body>
 
-  <!-- 左側：会員情報・チャージ・購入履歴 -->
+  <!-- 左パネル：商品リスト -->
   <div class="left-panel">
-    <div class="status-card" id="memberStatus">
-      <h3 style="margin:0; color:#6b7280;">スキャン待機中</h3>
-      <p style="margin:5px 0 0 0; font-size:14px; color:#9ca3af;">iPhoneで会員QRコードを読み取ってください</p>
-    </div>
-    
-    <h3 style="margin: 0 0 8px 0;">チップチャージ</h3>
-    <div class="btn-group">
-      <button class="btn charge-btn" onclick="chargeChips(10)" disabled>+ 10 枚</button>
-      <button class="btn charge-btn" onclick="chargeChips(50)" disabled>+ 50 枚</button>
-      <button class="btn charge-btn" onclick="chargeChips(100)" disabled>+ 100 枚</button>
-      <button class="btn charge-btn" onclick="chargeChips(500)" disabled>+ 500 枚</button>
-    </div>
-
-    <!-- 購入履歴エリア -->
-    <div class="history-section">
-      <h3 style="margin:0 0 8px 0;">購入履歴</h3>
-      <div class="history-list" id="historyList">
-        <div style="color:#9ca3af; text-align:center; margin-top:20px;">会員コードを読み取ると履歴が表示されます</div>
-      </div>
+    <h2>商品一覧</h2>
+    <div id="product-container" class="product-list">
+      <!-- サーバーから取得した商品がここに表示されます -->
     </div>
   </div>
 
-  <!-- 右側：商品＆カート -->
+  <!-- 右パネル：会員情報とカート -->
   <div class="right-panel">
-    <div class="header-row">
-      <h2 style="margin:0;">景品一覧</h2>
-      <button class="restock-btn" onclick="openRestockModal()">📦 在庫を追加する</button>
+    <div id="member-section" class="member-info" style="display: none;">
+      <h2>会員情報</h2>
+      <p>名前: <span id="member-name"></span> (ID: <span id="member-id"></span>)</p>
+      <p>所持チップ: <strong id="member-chips"></strong> 枚</p>
     </div>
-
-    <!-- カテゴリ選択タブ -->
-    <div class="category-tabs">
-      <button class="tab-btn active" onclick="filterCategory('すべて')">すべて</button>
-      <button class="tab-btn" onclick="filterCategory('お菓子')">お菓子</button>
-      <button class="tab-btn" onclick="filterCategory('ドリンク')">ドリンク</button>
-      <button class="tab-btn" onclick="filterCategory('おもちゃ')">おもちゃ</button>
-      <button class="tab-btn" onclick="filterCategory('イベント景品')">イベント景品</button>
+    <div id="waiting-message">
+      <h2>iPhoneで会員のQRコードをスキャンしてください</h2>
     </div>
-    
-    <div class="product-grid" id="productGrid"></div>
 
     <div class="cart-section">
-      <h3 style="margin:0 0 8px 0; font-size:16px;">選択中の景品 (カート)</h3>
-      <div class="cart-list" id="cartList">
-        <div style="color:#9ca3af; font-size:14px;">景品が選択されていません</div>
+      <h3>カート</h3>
+      <div id="cart-items" class="cart-list">
+        <!-- カートの中身がここに表示されます -->
       </div>
-      
-      <div style="margin-bottom:10px; font-weight:bold; font-size:18px;">
-        消費チップ合計: <span id="totalCost" style="color:#ef4444;">0</span> 枚
-      </div>
-      <button class="checkout-btn" id="checkoutBtn" onclick="submitPurchase()" disabled>交換を確定する</button>
-    </div>
-  </div>
-
-  <!-- 在庫補充モーダル -->
-  <div class="modal-overlay" id="restockModal">
-    <div class="modal">
-      <h3>在庫の追加・補充</h3>
-      <select id="restockProductSelect"></select>
-      <input type="number" id="restockAmount" placeholder="追加する数量 (例: 10)" min="1">
-      <div style="display:flex; gap:10px; margin-top:15px;">
-        <button class="btn" style="background:#6b7280; flex:1;" onclick="closeModal('restockModal')">キャンセル</button>
-        <button class="btn" style="background:#10b981; flex:1;" onclick="submitRestock()">補充実行</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- 商品情報編集モーダル -->
-  <div class="modal-overlay" id="editProductModal">
-    <div class="modal">
-      <h3>景品情報の編集</h3>
-      <input type="hidden" id="editProductId">
-      
-      <label>景品名</label>
-      <input type="text" id="editProductName">
-      
-      <label>必要チップ数 (価格)</label>
-      <input type="number" id="editProductPrice" min="0">
-      
-      <label>現在の在庫数</label>
-      <input type="number" id="editProductStock" min="0">
-
-      <div style="display:flex; gap:10px; margin-top:20px;">
-        <button class="btn" style="background:#6b7280; flex:1;" onclick="closeModal('editProductModal')">キャンセル</button>
-        <button class="btn" style="background:#10b981; flex:1;" onclick="submitProductEdit()">変更を保存</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- 会員詳細・購入履歴表示モーダル -->
-  <div class="modal-overlay" id="memberHistoryModal">
-    <div class="modal" style="width:500px;">
-      <h3 id="modalMemberTitle" style="margin-bottom:5px;">会員詳細</h3>
-      <div id="modalMemberSubtitle" style="color:#6b7280; font-size:14px; margin-bottom:15px;"></div>
-      
-      <h4 style="text-align:left; margin:10px 0 5px 0;">全購入・交換履歴</h4>
-      <div id="modalHistoryList" style="max-height:300px; overflow-y:auto; border:1px solid #e5e7eb; border-radius:8px; padding:10px; background:#fafafa;"></div>
-
-      <div style="margin-top:20px;">
-        <button class="btn" style="background:#6b7280; width:100%;" onclick="closeModal('memberHistoryModal')">閉じる</button>
-      </div>
+      <h3 style="text-align: right;">合計: <span id="total-cost">0</span> チップ</h3>
+      <button id="checkout-btn" disabled>購入する</button>
     </div>
   </div>
 
   <script>
     const socket = io();
-    let currentMember = null, productsList = [], cart = {}, selectedCategory = 'すべて';
+    let currentMember = null;
+    let products = [];
+    let cart = {};
 
-    socket.on('init-data', (data) => { productsList = data.products; renderProducts(); });
-    socket.on('member-scanned', (data) => { currentMember = data.member; cart = {}; renderMember(); renderProducts(); });
-    socket.on('member-updated', (data) => { currentMember = data.member; renderMember(); });
-    socket.on('data-updated', (data) => { 
-      if (data.member) currentMember = data.member; 
-      productsList = data.products; 
-      renderMember(); 
-      renderProducts(); 
+    const productContainer = document.getElementById('product-container');
+    const memberSection = document.getElementById('member-section');
+    const waitingMessage = document.getElementById('waiting-message');
+    const cartItemsDiv = document.getElementById('cart-items');
+    const totalCostSpan = document.getElementById('total-cost');
+    const checkoutBtn = document.getElementById('checkout-btn');
+
+    // 初期データの受信（商品リスト）
+    socket.on('init-data', (data) => {
+      products = data.products;
+      renderProducts();
     });
 
-    socket.on('purchase-success', (res) => { 
-      alert(res.message); 
-      clearMemberSilently(); // 会員選択を終了して初期状態に戻す
-    });
-
-    socket.on('toast-message', (res) => alert(res.message));
-    socket.on('error-message', (res) => alert(res.message));
-
-    // 会員選択解除処理
-    function clearMember() {
-      if (Object.keys(cart).length > 0) {
-        if (!confirm('カートに商品が入っています。選択を解除してカートをリセットしますか？')) {
-          return;
-        }
+    // データの更新（購入後や設定変更後）
+    socket.on('data-updated', (data) => {
+      products = data.products;
+      if (data.member && currentMember && data.member.id === currentMember.id) {
+        currentMember = data.member;
+        renderMember();
       }
-      clearMemberSilently();
-    }
+      renderProducts();
+    });
 
-    function clearMemberSilently() {
+    // ★重要: スキャン情報の受信 (サーバーの構造 { member: { ... } } に合わせる)
+    socket.on('member-scanned', (data) => {
+      console.log('スキャン情報を受信:', data);
+      if (data && data.member) {
+        currentMember = data.member;
+        cart = {}; // スキャンごとにカートをリセット
+        renderMember();
+        renderCart();
+      }
+    });
+
+    // 購入完了
+    socket.on('purchase-success', (data) => {
+      alert(data.message);
       currentMember = null;
       cart = {};
       renderMember();
-      renderProducts();
-    }
+      renderCart();
+    });
 
-    function filterCategory(cat) {
-      selectedCategory = cat;
-      document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.innerText === cat);
+    // エラー
+    socket.on('error-message', (data) => {
+      alert('エラー: ' + data.message);
+    });
+
+    // 商品一覧の描画
+    function renderProducts() {
+      productContainer.innerHTML = '';
+      products.forEach(p => {
+        const div = document.createElement('div');
+        div.className = 'product-card';
+        div.innerHTML = `
+          <strong>${p.name}</strong><br>
+          ${p.price} チップ<br>
+          在庫: ${p.currentStock}
+        `;
+        // 在庫がある場合のみクリック可能にする
+        if (p.currentStock > 0) {
+          div.onclick = () => addToCart(p);
+        } else {
+          div.style.background = '#f8d7da';
+          div.style.cursor = 'not-allowed';
+        }
+        productContainer.appendChild(div);
       });
-      renderProducts();
     }
 
+    // 会員情報の描画
     function renderMember() {
-      const statusDiv = document.getElementById('memberStatus');
-      const hList = document.getElementById('historyList');
-      const chargeBtns = document.querySelectorAll('.charge-btn');
+      if (currentMember) {
+        document.getElementById('member-name').innerText = currentMember.name;
+        document.getElementById('member-id').innerText = currentMember.id;
+        document.getElementById('member-chips').innerText = currentMember.chips;
+        memberSection.style.display = 'block';
+        waitingMessage.style.display = 'none';
+        checkoutBtn.disabled = false;
+      } else {
+        memberSection.style.display = 'none';
+        waitingMessage.style.display = 'block';
+        checkoutBtn.disabled = true;
+      }
+    }
 
+    // カートに追加
+    function addToCart(product) {
       if (!currentMember) {
-        statusDiv.className = 'status-card';
-        statusDiv.removeAttribute('onclick');
-        statusDiv.innerHTML = `
-          <h3 style="margin:0; color:#6b7280;">スキャン待機中</h3>
-          <p style="margin:5px 0 0 0; font-size:14px; color:#9ca3af;">iPhoneで会員QRコードを読み取ってください</p>`;
-        
-        hList.innerHTML = '<div style="color:#9ca3af; text-align:center; margin-top:20px;">会員コードを読み取ると履歴が表示されます</div>';
-        
-        // 会員がいない時はチャージボタンを無効化
-        chargeBtns.forEach(btn => btn.disabled = true);
+        alert('先に会員をスキャンしてください。');
+        return;
+      }
+      
+      const currentQuantity = cart[product.id] ? cart[product.id].quantity : 0;
+      if (currentQuantity + 1 > product.currentStock) {
+        alert('在庫が不足しています。');
         return;
       }
 
-      // 会員選択時
-      chargeBtns.forEach(btn => btn.disabled = false);
-      statusDiv.className = 'status-card active';
-      statusDiv.setAttribute('onclick', 'openMemberHistoryModal()');
-      statusDiv.innerHTML = `
-        <button class="clear-member-btn" onclick="event.stopPropagation(); clearMember();">✕ 選択解除</button>
-        <h2 style="margin:0; text-decoration: underline;">${currentMember.name} (ID: ${currentMember.id})</h2>
-        <div style="margin-top:5px; font-size:12px; color:#6366f1;">👆 タップで全履歴を表示</div>
-        <div style="margin-top:5px; font-size:14px; color:#4b5563;">現在の所持チップ</div>
-        <div class="chip-badge">${currentMember.chips} 枚</div>`;
-
-      hList.innerHTML = '';
-      if (!currentMember.history || currentMember.history.length === 0) {
-        hList.innerHTML = '<div style="color:#9ca3af; text-align:center; padding:10px;">購入履歴はありません</div>';
+      if (cart[product.id]) {
+        cart[product.id].quantity += 1;
       } else {
-        currentMember.history.forEach(h => {
-          const itemDiv = document.createElement('div');
-          itemDiv.className = 'history-item';
-          itemDiv.innerHTML = `
-            <div class="history-time">⏰ ${h.time}</div>
-            <div style="font-weight:bold; color:#111827;">${h.items}</div>
-            <div style="color:#ef4444; font-weight:bold; text-align:right; margin-top:2px;">-${h.cost} チップ</div>
-          `;
-          hList.appendChild(itemDiv);
-        });
+        cart[product.id] = { ...product, quantity: 1 };
       }
+      renderCart();
     }
 
-    function renderProducts() {
-      const grid = document.getElementById('productGrid');
-      grid.innerHTML = '';
-
-      let filtered = productsList;
-      if (selectedCategory !== 'すべて') {
-        filtered = filtered.filter(p => p.category === selectedCategory);
-      }
-      const sorted = [...filtered].sort((a, b) => b.reductionRate - a.reductionRate);
-      
-      sorted.forEach(p => {
-        const inCartQty = cart[p.id] || 0;
-        const card = document.createElement('div');
-        card.className = `product-card ${inCartQty > 0 ? 'active' : ''} ${p.currentStock <= 0 ? 'out-of-stock' : ''}`;
-        
-        card.innerHTML = `
-          <div class="rate-badge">減少率 ${p.reductionRate}%</div>
-          <div onclick="addCart('${p.id}')" style="cursor:pointer; flex:1;">
-            <span class="category-tag">${p.category}</span>
-            <div style="font-weight:bold; font-size:18px;">${p.name}</div>
-            <div style="color:#4b5563; margin-top:4px;">必要: ${p.price} チップ | 在庫: ${p.currentStock}/${p.initialStock}</div>
-          </div>
-          <div style="display:flex; justify-content:space-between; align-items:flex-end;">
-            <button class="edit-item-btn" onclick="event.stopPropagation(); openEditModal('${p.id}')">✏️ 編集</button>
-            ${inCartQty > 0 ? `<div style="color:#10b981; font-weight:bold;">カート内: ${inCartQty} 個</div>` : ''}
-          </div>
-        `;
-        grid.appendChild(card);
-      });
-      renderCartUI();
-    }
-
-    function addCart(id) {
-      if (!currentMember) return alert('会員QRコードを読み取ってください');
-      const p = productsList.find(item => item.id === id);
-      if (!p) return;
-      const currentQty = cart[id] || 0;
-      if (currentQty + 1 > p.currentStock) {
-        return alert('これ以上在庫がありません');
-      }
-      cart[id] = currentQty + 1;
-      renderProducts();
-    }
-
-    function changeQty(id, delta) {
-      if (!cart[id]) return;
-      const p = productsList.find(item => item.id === id);
-      const newQty = cart[id] + delta;
-      
-      if (delta > 0 && newQty > p.currentStock) {
-        return alert('これ以上在庫がありません');
-      }
-
-      if (newQty <= 0) {
-        delete cart[id];
-      } else {
-        cart[id] = newQty;
-      }
-      renderProducts();
-    }
-
-    function removeCartItem(id) {
-      delete cart[id];
-      renderProducts();
-    }
-
-    function renderCartUI() {
-      const list = document.getElementById('cartList');
-      list.innerHTML = '';
+    // カートの描画
+    function renderCart() {
+      cartItemsDiv.innerHTML = '';
       let total = 0;
-      const keys = Object.keys(cart);
-
-      if (keys.length === 0) {
-        list.innerHTML = '<div style="color:#9ca3af; font-size:14px;">景品が選択されていません</div>';
-      } else {
-        keys.forEach(id => {
-          const p = productsList.find(prod => prod.id === id);
-          if (p) {
-            const qty = cart[id];
-            total += p.price * qty;
-            const itemDiv = document.createElement('div');
-            itemDiv.className = 'cart-item';
-            itemDiv.innerHTML = `
-              <div><strong>${p.name}</strong> (${p.price}枚 × ${qty})</div>
-              <div class="cart-controls">
-                <button class="qty-btn btn-minus" onclick="changeQty('${id}', -1)">-</button>
-                <span>${qty}</span>
-                <button class="qty-btn btn-plus" onclick="changeQty('${id}', 1)">+</button>
-                <button class="qty-btn btn-del" onclick="removeCartItem('${id}')">削除</button>
-              </div>
-            `;
-            list.appendChild(itemDiv);
-          }
-        });
-      }
-
-      document.getElementById('totalCost').innerText = total;
-      document.getElementById('checkoutBtn').disabled = !currentMember || total === 0;
-    }
-
-    function chargeChips(amount) {
-      if (!currentMember) return alert('会員QRコードを読み取ってください');
-      socket.emit('charge-chips', { memberId: currentMember.id, amount });
-    }
-
-    function submitPurchase() {
-      if (!currentMember) return;
-      const cartItems = Object.keys(cart).map(id => ({ id, quantity: cart[id] }));
-      socket.emit('purchase-items', { memberId: currentMember.id, cartItems });
-    }
-
-    /* モーダル操作系 */
-    function closeModal(id) {
-      document.getElementById(id).style.display = 'none';
-    }
-
-    function openRestockModal() {
-      const select = document.getElementById('restockProductSelect');
-      select.innerHTML = '';
-      productsList.forEach(p => {
-        const opt = document.createElement('option');
-        opt.value = p.id;
-        opt.innerText = `[${p.category}] ${p.name} (現在在庫: ${p.currentStock})`;
-        select.appendChild(opt);
+      Object.values(cart).forEach(item => {
+        total += item.price * item.quantity;
+        const div = document.createElement('div');
+        div.className = 'cart-item';
+        div.innerHTML = `<span>${item.name} (x${item.quantity})</span><span>${item.price * item.quantity} チップ</span>`;
+        cartItemsDiv.appendChild(div);
       });
-      document.getElementById('restockModal').style.display = 'flex';
-    }
+      totalCostSpan.innerText = total;
 
-    function submitRestock() {
-      const productId = document.getElementById('restockProductSelect').value;
-      const amount = parseInt(document.getElementById('restockAmount').value, 10);
-      if (!amount || amount <= 0) return alert('正しく数量を入力してください');
-      
-      socket.emit('restock-item', { productId, amount });
-      closeModal('restockModal');
-      document.getElementById('restockAmount').value = '';
-    }
-
-    /* 商品編集モーダル */
-    function openEditModal(productId) {
-      const p = productsList.find(item => item.id === productId);
-      if (!p) return;
-
-      document.getElementById('editProductId').value = p.id;
-      document.getElementById('editProductName').value = p.name;
-      document.getElementById('editProductPrice').value = p.price;
-      document.getElementById('editProductStock').value = p.currentStock;
-
-      document.getElementById('editProductModal').style.display = 'flex';
-    }
-
-    function submitProductEdit() {
-      const productId = document.getElementById('editProductId').value;
-      const name = document.getElementById('editProductName').value.trim();
-      const price = parseInt(document.getElementById('editProductPrice').value, 10);
-      const currentStock = parseInt(document.getElementById('editProductStock').value, 10);
-
-      if (!name || isNaN(price) || isNaN(currentStock)) {
-        return alert('正しく値を入力してください');
-      }
-
-      socket.emit('update-product', { productId, name, price, currentStock });
-      closeModal('editProductModal');
-    }
-
-    /* 会員詳細・購入履歴表示モーダル */
-    function openMemberHistoryModal() {
-      if (!currentMember) return;
-
-      document.getElementById('modalMemberTitle').innerText = `${currentMember.name} の購入履歴`;
-      document.getElementById('modalMemberSubtitle').innerText = `会員ID: ${currentMember.id} | 所持チップ: ${currentMember.chips}枚`;
-
-      const listDiv = document.getElementById('modalHistoryList');
-      listDiv.innerHTML = '';
-
-      if (!currentMember.history || currentMember.history.length === 0) {
-        listDiv.innerHTML = '<div style="color:#9ca3af; text-align:center; padding:20px;">購入履歴はまだありません</div>';
+      // チップ不足チェック
+      if (currentMember && total > currentMember.chips) {
+        totalCostSpan.style.color = 'red';
+        checkoutBtn.disabled = true;
+      } else if (currentMember && total > 0) {
+        totalCostSpan.style.color = 'black';
+        checkoutBtn.disabled = false;
       } else {
-        currentMember.history.forEach(h => {
-          const itemDiv = document.createElement('div');
-          itemDiv.className = 'history-item';
-          itemDiv.innerHTML = `
-            <div class="history-time">⏰ ${h.time}</div>
-            <div style="font-weight:bold; color:#111827;">${h.items}</div>
-            <div style="color:#ef4444; font-weight:bold; text-align:right; margin-top:2px;">-${h.cost} チップ</div>
-          `;
-          listDiv.appendChild(itemDiv);
-        });
+        totalCostSpan.style.color = 'black';
+        checkoutBtn.disabled = true;
       }
-
-      document.getElementById('memberHistoryModal').style.display = 'flex';
     }
+
+    // 購入ボタンの処理
+    checkoutBtn.onclick = () => {
+      const cartItems = Object.values(cart).map(item => ({ id: item.id, quantity: item.quantity }));
+      if (cartItems.length === 0) return;
+
+      socket.emit('purchase-items', {
+        memberId: currentMember.id,
+        cartItems: cartItems
+      });
+    };
   </script>
 </body>
 </html>
