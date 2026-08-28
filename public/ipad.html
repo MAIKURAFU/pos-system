@@ -195,7 +195,7 @@
   </div>
 
   <!-- システムロック画面オーバーレイ -->
-  <div class="modal-overlay" id="lockOverlay" style="z-index: 9999; background: rgba(15, 23, 42, 0.95); flex-direction: column; color: white;">
+  <div class="modal-overlay" id="lockOverlay" style="z-index: 9999; background: rgba(15, 23, 42, 0.95); flex-direction: column; color: white; display: flex;">
     <div style="text-align: center;">
       <div style="font-size: 64px; margin-bottom: 20px;">🔒</div>
       <h2 style="margin: 0 0 10px 0; font-size: 28px;">システムはロックされています</h2>
@@ -207,12 +207,12 @@
     const socket = io();
     let currentMember = null, productsList = [], cart = {}, selectedCategory = 'すべて';
 
+    // 接続初期化イベント
     socket.on('init-data', (data) => {
-      productsList = data.products;
+      productsList = data.products || [];
       renderProducts();
-      if (data.isLocked) {
-        showLockScreen(true);
-      }
+      // 初期データに含まれるロック状態を反映
+      showLockScreen(!!data.isLocked);
     });
 
     socket.on('member-scanned', (data) => { 
@@ -228,13 +228,18 @@
 
     socket.on('data-updated', (data) => { 
       if (data.member !== undefined) currentMember = data.member; 
-      productsList = data.products; 
+      if (data.products) productsList = data.products; 
       renderMember(); 
       renderProducts(); 
     });
 
+    // サーバーからのロック状態変更イベントの更新
     socket.on('system-lock-status', (data) => {
       showLockScreen(data.isLocked);
+      if (data.isLocked) {
+        // ロックされた場合は現在選択中の会員とカートをリセット
+        clearMemberSilently();
+      }
     });
 
     socket.on('purchase-success', (res) => { 
@@ -245,12 +250,14 @@
     socket.on('toast-message', (res) => alert(res.message));
     socket.on('error-message', (res) => alert(res.message));
 
+    // システムロックのリクエスト
     function requestLock() {
       if (confirm('システムをロックしますか？')) {
         socket.emit('lock-system');
       }
     }
 
+    // ロック画面の表示切替
     function showLockScreen(locked) {
       const overlay = document.getElementById('lockOverlay');
       if (overlay) {
