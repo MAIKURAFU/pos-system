@@ -224,7 +224,12 @@
       }
     });
 
-    socket.on('member-updated', (data) => { currentMember = data.member; renderMember(); });
+    socket.on('member-updated', (data) => { 
+      if (data && data.member) {
+        currentMember = data.member; 
+        renderMember(); 
+      }
+    });
 
     socket.on('data-updated', (data) => { 
       if (data.member !== undefined) currentMember = data.member; 
@@ -248,7 +253,6 @@
     socket.on('toast-message', (res) => alert(res.message));
     socket.on('error-message', (res) => alert(res.message));
 
-    // システムロックのリクエスト（確認ポップアップなしで即時発火）
     function requestLock() {
       socket.emit('lock-system');
     }
@@ -284,6 +288,7 @@
       renderProducts();
     }
 
+    // 会員表示処理（undefined防止の安全化を実施）
     function renderMember() {
       const statusDiv = document.getElementById('memberStatus');
       const hList = document.getElementById('historyList');
@@ -304,12 +309,17 @@
       chargeBtns.forEach(btn => btn.disabled = false);
       statusDiv.className = 'status-card active';
       statusDiv.setAttribute('onclick', 'openMemberHistoryModal()');
+
+      // IDおよびチップの変数を安全に取得
+      const displayId = currentMember.id || currentMember.memberId || currentMember.code || '不明';
+      const displayChips = currentMember.chips !== undefined ? currentMember.chips : 0;
+
       statusDiv.innerHTML = `
         <button class="clear-member-btn" onclick="event.stopPropagation(); clearMember();">✕ 選択解除</button>
-        <h2 style="margin:0; text-decoration: underline;">ID: ${currentMember.id}</h2>
+        <h2 style="margin:0; text-decoration: underline;">ID: ${displayId}</h2>
         <div style="margin-top:5px; font-size:12px; color:#6366f1;">👆 タップで全履歴を表示</div>
         <div style="margin-top:5px; font-size:14px; color:#4b5563;">現在の所持チップ</div>
-        <div class="chip-badge">${currentMember.chips} 枚</div>`;
+        <div class="chip-badge">${displayChips} 枚</div>`;
 
       hList.innerHTML = '';
       if (!currentMember.history || currentMember.history.length === 0) {
@@ -319,10 +329,16 @@
           const itemDiv = document.createElement('div');
           itemDiv.className = 'history-item';
           const staffText = h.staffId ? ` | 担当: ${h.staffId}` : '';
+          
+          // 履歴オブジェクトのプロパティの揺れに対応
+          const itemName = h.items || h.item || h.name || '商品情報なし';
+          const itemCost = h.cost !== undefined ? h.cost : (h.amount || h.price || 0);
+          const itemTime = h.time || h.timestamp || '日時不明';
+
           itemDiv.innerHTML = `
-            <div class="history-time">⏰ ${h.time}${staffText}</div>
-            <div style="font-weight:bold; color:#111827;">${h.items}</div>
-            <div style="color:#ef4444; font-weight:bold; text-align:right; margin-top:2px;">-${h.cost} チップ</div>
+            <div class="history-time">⏰ ${itemTime}${staffText}</div>
+            <div style="font-weight:bold; color:#111827;">${itemName}</div>
+            <div style="color:#ef4444; font-weight:bold; text-align:right; margin-top:2px;">-${itemCost} チップ</div>
           `;
           hList.appendChild(itemDiv);
         });
@@ -431,13 +447,15 @@
 
     function chargeChips(amount) {
       if (!currentMember) return alert('会員QRコードを読み取ってください');
-      socket.emit('charge-chips', { memberId: currentMember.id, amount });
+      const memberId = currentMember.id || currentMember.memberId;
+      socket.emit('charge-chips', { memberId, amount });
     }
 
     function submitPurchase() {
       if (!currentMember) return;
+      const memberId = currentMember.id || currentMember.memberId;
       const cartItems = Object.keys(cart).map(id => ({ id, quantity: cart[id] }));
-      socket.emit('purchase-items', { memberId: currentMember.id, cartItems });
+      socket.emit('purchase-items', { memberId, cartItems });
     }
 
     function closeModal(id) {
@@ -492,11 +510,15 @@
       closeModal('editProductModal');
     }
 
+    // 会員詳細モーダルの安全化
     function openMemberHistoryModal() {
       if (!currentMember) return;
 
-      document.getElementById('modalMemberTitle').innerText = `会員 ID: ${currentMember.id} の購入履歴`;
-      document.getElementById('modalMemberSubtitle').innerText = `会員ID: ${currentMember.id} | 所持チップ: ${currentMember.chips}枚`;
+      const displayId = currentMember.id || currentMember.memberId || currentMember.code || '不明';
+      const displayChips = currentMember.chips !== undefined ? currentMember.chips : 0;
+
+      document.getElementById('modalMemberTitle').innerText = `会員 ID: ${displayId} の購入履歴`;
+      document.getElementById('modalMemberSubtitle').innerText = `会員ID: ${displayId} | 所持チップ: ${displayChips}枚`;
 
       const listDiv = document.getElementById('modalHistoryList');
       listDiv.innerHTML = '';
@@ -508,10 +530,15 @@
           const itemDiv = document.createElement('div');
           itemDiv.className = 'history-item';
           const staffText = h.staffId ? ` | 担当: ${h.staffId}` : '';
+
+          const itemName = h.items || h.item || h.name || '商品情報なし';
+          const itemCost = h.cost !== undefined ? h.cost : (h.amount || h.price || 0);
+          const itemTime = h.time || h.timestamp || '日時不明';
+
           itemDiv.innerHTML = `
-            <div class="history-time">⏰ ${h.time}${staffText}</div>
-            <div style="font-weight:bold; color:#111827;">${h.items}</div>
-            <div style="color:#ef4444; font-weight:bold; text-align:right; margin-top:2px;">-${h.cost} チップ</div>
+            <div class="history-time">⏰ ${itemTime}${staffText}</div>
+            <div style="font-weight:bold; color:#111827;">${itemName}</div>
+            <div style="color:#ef4444; font-weight:bold; text-align:right; margin-top:2px;">-${itemCost} チップ</div>
           `;
           listDiv.appendChild(itemDiv);
         });
