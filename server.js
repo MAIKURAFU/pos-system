@@ -13,7 +13,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 // ---------------------------------------------------------
 // メモリ内データストア（永続化が必要な場合は DB/JSON ファイル等へ変更）
 // ---------------------------------------------------------
-let isLocked = false; // システムロック状態
+let isLocked = true; // 起動時はデフォルトでロック状態
 
 // 初期景品データ
 let products = [
@@ -62,16 +62,21 @@ io.on('connection', (socket) => {
     const rawCode = data && data.code ? data.code.trim() : '';
     if (!rawCode) return;
 
-    // 1. 従業員キー（従0001, 従0002, 従0003）の判定
+    // 1. 従業員キー（従0001, 従0002, 従0003）の判定（解除専用処理）
     if (EMPLOYEE_KEYS.includes(rawCode)) {
-      isLocked = !isLocked; // ロック状態を反転
-      console.log(`[従業員操作] ${rawCode} によりシステムが${isLocked ? 'ロック' : '解除'}されました`);
+      if (!isLocked) {
+        // すでに解除されている場合
+        socket.emit('toast-message', { message: 'システムはすでに解除されています' });
+        return;
+      }
+
+      // ロック解除処理を実行
+      isLocked = false;
+      console.log(`[従業員操作] ${rawCode} によりシステムが解除されました`);
 
       io.emit('system-lock-status', {
-        isLocked,
-        message: isLocked 
-          ? `従業員キー (${rawCode}) によりシステムがロックされました` 
-          : `従業員キー (${rawCode}) によりシステムが解除されました`
+        isLocked: false,
+        message: `従業員キー (${rawCode}) によりシステムが解除されました`
       });
       return;
     }
@@ -90,7 +95,7 @@ io.on('connection', (socket) => {
       memberId = rawCode.padStart(4, '0');
     }
 
-    // 会員データが存在しない場合は自動作成 (0001〜1000などすべてのコードに対応)
+    // 会員データが存在しない場合は自動作成
     if (!members[memberId]) {
       members[memberId] = {
         id: memberId,
@@ -228,10 +233,11 @@ io.on('connection', (socket) => {
   });
 
   // -------------------------------------------------------
-  // iPad側からの直接ロック要請
+  // iPad側からの直接ロック要請（ボタン押下）
   // -------------------------------------------------------
   socket.on('lock-system', () => {
     isLocked = true;
+    console.log('[手動ロック] システムが手動でロックされました');
     io.emit('system-lock-status', {
       isLocked: true,
       message: 'システムが手動でロックされました'
