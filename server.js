@@ -12,6 +12,11 @@ const PORT = process.env.PORT || 3000;
 // 静的ファイルの提供
 app.use(express.static(path.join(__dirname, 'public')));
 
+// ヘルスチェック用エンドポイント（UptimeRobot等の監視用）
+app.get('/ping', (req, res) => {
+  res.status(200).send('pong');
+});
+
 // システムロック初期状態（起動時はロック状態）
 let isLocked = true;
 
