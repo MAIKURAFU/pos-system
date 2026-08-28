@@ -114,7 +114,10 @@
   <div class="right-panel">
     <div class="header-row">
       <h2 style="margin:0;">景品一覧</h2>
-      <button class="restock-btn" onclick="openRestockModal()">📦 在庫を追加する</button>
+      <div style="display:flex; gap:8px;">
+        <button class="restock-btn" onclick="openRestockModal()">📦 在庫を追加する</button>
+        <button class="restock-btn" style="background:#ef4444;" onclick="requestLock()">🔒 システムロック</button>
+      </div>
     </div>
 
     <!-- カテゴリ選択タブ -->
@@ -191,12 +194,27 @@
     </div>
   </div>
 
+  <!-- システムロック画面オーバーレイ -->
+  <div class="modal-overlay" id="lockOverlay" style="z-index: 9999; background: rgba(15, 23, 42, 0.95); flex-direction: column; color: white;">
+    <div style="text-align: center;">
+      <div style="font-size: 64px; margin-bottom: 20px;">🔒</div>
+      <h2 style="margin: 0 0 10px 0; font-size: 28px;">システムはロックされています</h2>
+      <p style="color: #9ca3af; font-size: 16px; margin: 0;">iPhoneスキャナーから従業員専用QRコードを読み込んで解除してください</p>
+    </div>
+  </div>
+
   <script>
     const socket = io();
     let currentMember = null, productsList = [], cart = {}, selectedCategory = 'すべて';
 
-    // ★ここで data.member を正しく受け取るように修正済み
-    socket.on('init-data', (data) => { productsList = data.products; renderProducts(); });
+    socket.on('init-data', (data) => {
+      productsList = data.products;
+      renderProducts();
+      if (data.isLocked) {
+        showLockScreen(true);
+      }
+    });
+
     socket.on('member-scanned', (data) => { 
       if (data && data.member) {
         currentMember = data.member; 
@@ -205,12 +223,21 @@
         renderProducts(); 
       }
     });
+
     socket.on('member-updated', (data) => { currentMember = data.member; renderMember(); });
+
     socket.on('data-updated', (data) => { 
-      if (data.member) currentMember = data.member; 
+      if (data.member !== undefined) currentMember = data.member; 
       productsList = data.products; 
       renderMember(); 
       renderProducts(); 
+    });
+
+    socket.on('system-lock-status', (data) => {
+      showLockScreen(data.isLocked);
+      if (data.message) {
+        alert(data.message);
+      }
     });
 
     socket.on('purchase-success', (res) => { 
@@ -220,6 +247,19 @@
 
     socket.on('toast-message', (res) => alert(res.message));
     socket.on('error-message', (res) => alert(res.message));
+
+    function requestLock() {
+      if (confirm('システムをロックしますか？')) {
+        socket.emit('lock-system');
+      }
+    }
+
+    function showLockScreen(locked) {
+      const overlay = document.getElementById('lockOverlay');
+      if (overlay) {
+        overlay.style.display = locked ? 'flex' : 'none';
+      }
+    }
 
     function clearMember() {
       if (Object.keys(cart).length > 0) {

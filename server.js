@@ -1,179 +1,190 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
+const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: '*' } });
+const io = new Server(server);
 
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, 'public')));
 
-app.get('/ping', (req, res) => {
-  res.status(200).send('pong');
-});
+// 従業員IDリスト
+const EMPLOYEE_IDS = ['従0001', '従0002', '従0003'];
 
-// 会員データ
-const members = {
-  '0001': { id: '0001', name: '会員 0001', chips: 150, history: [] },
-  '0002': { id: '0002', name: '会員 0002', chips: 50, history: [] },
-  '0003': { id: '0003', name: '会員 0003', chips: 300, history: [] },
-};
+// システムロック状態
+let isLocked = false;
 
-// 商品リスト（ジャンル別）
-const products = [
-  // お菓子
-  { id: 'snack1', category: 'お菓子', name: 'アルフォート', price: 10, initialStock: 50, currentStock: 50 },
-  { id: 'snack2', category: 'お菓子', name: 'チョコまみれ', price: 10, initialStock: 50, currentStock: 50 },
-  { id: 'snack3', category: 'お菓子', name: 'カントリーマーム', price: 10, initialStock: 50, currentStock: 50 },
-  { id: 'snack4', category: 'お菓子', name: 'チョコクッキー', price: 10, initialStock: 50, currentStock: 50 },
-  { id: 'snack5', category: 'お菓子', name: 'ちびポテト', price: 10, initialStock: 50, currentStock: 50 },
-  { id: 'snack6', category: 'お菓子', name: 'おにぎりせんべい', price: 10, initialStock: 50, currentStock: 50 },
-  { id: 'snack7', category: 'お菓子', name: 'キットカット', price: 10, initialStock: 50, currentStock: 50 },
-
-  // ドリンク
-  { id: 'drink1', category: 'ドリンク', name: 'お茶', price: 20, initialStock: 30, currentStock: 30 },
-  { id: 'drink2', category: 'ドリンク', name: 'きっと果実', price: 20, initialStock: 30, currentStock: 30 },
-  { id: 'drink3', category: 'ドリンク', name: 'ファンタ', price: 20, initialStock: 30, currentStock: 30 },
-  { id: 'drink4', category: 'ドリンク', name: '午後ティー', price: 20, initialStock: 30, currentStock: 30 },
-  { id: 'drink5', category: 'ドリンク', name: 'コーラ', price: 20, initialStock: 30, currentStock: 30 },
-
-  // おもちゃ
-  { id: 'toy1', category: 'おもちゃ', name: 'ピコピコハンマー', price: 50, initialStock: 20, currentStock: 20 },
-  { id: 'toy2', category: 'おもちゃ', name: '風船ハンマー', price: 50, initialStock: 20, currentStock: 20 },
-  { id: 'toy3', category: 'おもちゃ', name: 'ボール銃', price: 80, initialStock: 15, currentStock: 15 },
-  { id: 'toy4', category: 'おもちゃ', name: 'ハンドスピナー', price: 60, initialStock: 20, currentStock: 20 },
-  { id: 'toy5', category: 'おもちゃ', name: 'スクウィーズ', price: 40, initialStock: 20, currentStock: 20 },
-
-  // イベント景品
-  { id: 'event1', category: 'イベント景品', name: 'ポケモンカード', price: 100, initialStock: 10, currentStock: 10 },
-  { id: 'event2', category: 'イベント景品', name: 'ワンピースカード', price: 100, initialStock: 10, currentStock: 10 },
-  { id: 'event3', category: 'イベント景品', name: 'ガンダムプラモデル', price: 300, initialStock: 5, currentStock: 5 },
-  { id: 'event4', category: 'イベント景品', name: 'イヤホン', price: 200, initialStock: 5, currentStock: 5 },
-  { id: 'event5', category: 'イベント景品', name: 'アイラップ', price: 50, initialStock: 15, currentStock: 15 },
+// 初期データ（商品）
+let productsList = [
+  { id: 'p1', name: 'うまい棒', category: 'お菓子', price: 10, currentStock: 50, initialStock: 50, reductionRate: 0 },
+  { id: 'p2', name: 'ポテトチップス', category: 'お菓子', price: 30, currentStock: 20, initialStock: 20, reductionRate: 0 },
+  { id: 'p3', name: '緑茶 500ml', category: 'ドリンク', price: 20, currentStock: 30, initialStock: 30, reductionRate: 0 },
+  { id: 'p4', name: 'ミニカー', category: 'おもちゃ', price: 100, currentStock: 5, initialStock: 5, reductionRate: 0 }
 ];
 
-function getProductsWithStats() {
-  return products.map(p => {
-    const sold = p.initialStock - p.currentStock;
-    const reductionRate = p.initialStock > 0 ? ((sold / p.initialStock) * 100).toFixed(1) : 0;
-    return { ...p, sold, reductionRate };
-  });
+// 初期データ（会員データ例）
+let membersList = {
+  'M001': { id: 'M001', name: '山田 太郎', chips: 150, history: [] },
+  'M002': { id: 'M002', name: '佐藤 花子', chips: 300, history: [] }
+};
+
+let currentMemberId = null;
+
+function calculateReductionRate(p) {
+  if (!p.initialStock || p.initialStock <= 0) return 0;
+  const rate = ((p.initialStock - p.currentStock) / p.initialStock) * 100;
+  return Math.max(0, Math.min(100, Math.round(rate)));
 }
 
 io.on('connection', (socket) => {
-  socket.emit('init-data', { products: getProductsWithStats() });
+  console.log('クライアントが接続しました:', socket.id);
 
-  // QRスキャン時の処理
+  // 初期化データ送信（ロック状態も含める）
+  socket.emit('init-data', {
+    products: productsList,
+    member: currentMemberId ? membersList[currentMemberId] : null,
+    isLocked: isLocked
+  });
+
+  // システムロック処理
+  socket.on('lock-system', () => {
+    isLocked = true;
+    currentMemberId = null; // スキャン中の会員解除
+    io.emit('system-lock-status', { isLocked: true });
+    io.emit('data-updated', {
+      products: productsList,
+      member: null
+    });
+  });
+
+  // QRスキャン受信
   socket.on('scan-qr', (data) => {
-    const memberId = data.memberId ? String(data.memberId).trim() : null;
-    if (!memberId) return;
+    const { memberId } = data;
 
-    let member = members[memberId];
-    if (!member) {
-      member = { id: memberId, name: `新規会員 ${memberId}`, chips: 0, history: [] };
-      members[memberId] = member;
-    }
-    // 全ての接続クライアント（iPad含む）に会員スキャンを通知
-    io.emit('member-scanned', { member });
-    console.log(`会員スキャン検知: ID ${memberId} (${member.name})`);
-  });
-
-  socket.on('charge-chips', ({ memberId, amount }) => {
-    const member = members[memberId];
-    if (member) {
-      member.chips += amount;
-      
-      const now = new Date();
-      const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
-      
-      if (!member.history) member.history = [];
-      member.history.unshift({
-        time: timeStr,
-        items: `チップチャージ (+${amount}枚)`,
-        cost: -amount // チャージはマイナス表示（あるいは別表現）
-      });
-
-      // 全クライアントに会員情報の更新を通知
-      io.emit('member-updated', { member });
-    }
-  });
-
-  socket.on('restock-item', ({ productId, amount }) => {
-    const p = products.find(prod => prod.id === productId);
-    if (p && amount > 0) {
-      p.currentStock += amount;
-      p.initialStock += amount;
-      io.emit('data-updated', { member: null, products: getProductsWithStats() });
-      socket.emit('toast-message', { message: `${p.name} の在庫を ${amount} 個追加しました` });
-    }
-  });
-
-  // 商品設定（名前・必要チップ数・在庫数）の更新
-  socket.on('update-product', ({ productId, name, price, currentStock }) => {
-    const p = products.find(prod => prod.id === productId);
-    if (p) {
-      p.name = name;
-      p.price = price;
-      if (currentStock > p.initialStock) {
-        p.initialStock = currentStock;
+    // ロック中処理
+    if (isLocked) {
+      if (EMPLOYEE_IDS.includes(memberId)) {
+        isLocked = false;
+        io.emit('system-lock-status', { isLocked: false, message: 'システムロックを解除しました' });
+        socket.emit('toast-message', { message: 'ロックを解除しました' });
+      } else {
+        socket.emit('error-message', { message: 'システムロック中です。従業員QRコードをスキャンしてください。' });
       }
-      p.currentStock = currentStock;
+      return;
+    }
 
-      io.emit('data-updated', { member: null, products: getProductsWithStats() });
-      socket.emit('toast-message', { message: `${p.name} の設定を更新しました` });
+    // 従業員QRを通常スキャンした場合は通知
+    if (EMPLOYEE_IDS.includes(memberId)) {
+      socket.emit('toast-message', { message: '従業員QRコードです（ロック解除専用）' });
+      return;
+    }
+
+    // 通常の会員スキャン処理
+    if (membersList[memberId]) {
+      currentMemberId = memberId;
+      io.emit('member-scanned', { member: membersList[memberId] });
+    } else {
+      socket.emit('error-message', { message: '該当する会員が見つかりません: ' + memberId });
     }
   });
 
-  socket.on('purchase-items', ({ memberId, cartItems }) => {
-    const member = members[memberId];
-    if (!member) return;
+  // チップチャージ処理
+  socket.on('charge-chips', (data) => {
+    const { memberId, amount } = data;
+    if (membersList[memberId]) {
+      membersList[memberId].chips += amount;
+      io.emit('member-updated', { member: membersList[memberId] });
+      socket.emit('toast-message', { message: `${amount}チップをチャージしました` });
+    }
+  });
+
+  // 交換（購入）処理
+  socket.on('purchase-items', (data) => {
+    const { memberId, cartItems } = data;
+    const member = membersList[memberId];
+    if (!member) return socket.emit('error-message', { message: '会員が存在しません' });
 
     let totalCost = 0;
-    let stockError = false;
-    const purchasedSummary = [];
+    let purchaseSummaryList = [];
 
-    cartItems.forEach(item => {
-      const p = products.find(prod => prod.id === item.id);
-      if (p) {
-        if (p.currentStock < item.quantity) stockError = true;
-        totalCost += p.price * item.quantity;
-        purchasedSummary.push(`${p.name} × ${item.quantity}`);
+    for (let item of cartItems) {
+      const prod = productsList.find(p => p.id === item.id);
+      if (!prod) return socket.emit('error-message', { message: '存在しない商品が含まれています' });
+      if (prod.currentStock < item.quantity) {
+        return socket.emit('error-message', { message: `${prod.name} の在庫が不足しています` });
       }
-    });
-
-    if (stockError) {
-      socket.emit('error-message', { message: '在庫が不足している商品があります' });
-      return;
+      totalCost += prod.price * item.quantity;
+      purchaseSummaryList.push(`${prod.name} × ${item.quantity}`);
     }
 
     if (member.chips < totalCost) {
-      socket.emit('error-message', { message: 'チップが不足しています' });
-      return;
+      return socket.emit('error-message', { message: '所持チップが不足しています' });
     }
 
     member.chips -= totalCost;
     cartItems.forEach(item => {
-      const p = products.find(prod => prod.id === item.id);
-      if (p) {
-        p.currentStock -= item.quantity;
-      }
+      const prod = productsList.find(p => p.id === item.id);
+      prod.currentStock -= item.quantity;
+      prod.reductionRate = calculateReductionRate(prod);
     });
 
     const now = new Date();
-    const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
-    
-    if (!member.history) member.history = [];
+    const timeStr = now.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
     member.history.unshift({
       time: timeStr,
-      items: purchasedSummary.join(', '),
+      items: purchaseSummaryList.join(', '),
       cost: totalCost
     });
 
-    io.emit('data-updated', { member, products: getProductsWithStats() });
-    socket.emit('purchase-success', { message: '取引が完了しました' });
-    io.emit('transaction-completed');
+    currentMemberId = null;
+
+    io.emit('data-updated', {
+      products: productsList,
+      member: null
+    });
+
+    socket.emit('purchase-success', { message: '景品の交換が完了しました！' });
+  });
+
+  // 在庫補充処理
+  socket.on('restock-item', (data) => {
+    const { productId, amount } = data;
+    const prod = productsList.find(p => p.id === productId);
+    if (prod) {
+      prod.currentStock += amount;
+      prod.initialStock = Math.max(prod.initialStock, prod.currentStock);
+      prod.reductionRate = calculateReductionRate(prod);
+
+      io.emit('data-updated', {
+        products: productsList,
+        member: currentMemberId ? membersList[currentMemberId] : null
+      });
+      io.emit('toast-message', { message: `${prod.name} の在庫を ${amount} 個補充しました` });
+    }
+  });
+
+  // 商品編集処理
+  socket.on('update-product', (data) => {
+    const { productId, name, price, currentStock } = data;
+    const prod = productsList.find(p => p.id === productId);
+    if (prod) {
+      prod.name = name;
+      prod.price = price;
+      prod.currentStock = currentStock;
+      prod.initialStock = Math.max(prod.initialStock, currentStock);
+      prod.reductionRate = calculateReductionRate(prod);
+
+      io.emit('data-updated', {
+        products: productsList,
+        member: currentMemberId ? membersList[currentMemberId] : null
+      });
+      io.emit('toast-message', { message: `${name} の情報を更新しました` });
+    }
   });
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+server.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
