@@ -50,8 +50,10 @@ io.on('connection', (socket) => {
   // システムロック処理
   socket.on('lock-system', () => {
     isLocked = true;
-    currentMemberId = null; // スキャン中の会員解除
-    io.emit('system-lock-status', { isLocked: true });
+    currentMemberId = null; // スキャン中の会員を解除
+
+    // 全クライアントへロック状態をブロードキャスト送信
+    io.emit('system-lock-status', { isLocked: true, message: 'システムがロックされました' });
     io.emit('data-updated', {
       products: productsList,
       member: null

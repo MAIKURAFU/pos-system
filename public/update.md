@@ -1,0 +1,2 @@
+-- デプロイコード --
+-- git add . ; git commit -m "アップデート" ; git push origin main --

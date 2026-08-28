@@ -235,9 +235,6 @@
 
     socket.on('system-lock-status', (data) => {
       showLockScreen(data.isLocked);
-      if (data.message) {
-        alert(data.message);
-      }
     });
 
     socket.on('purchase-success', (res) => { 
