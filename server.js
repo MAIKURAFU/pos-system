@@ -15,6 +15,9 @@ app.use(express.static(path.join(__dirname, 'public')));
 // システムロック初期状態（起動時はロック状態）
 let isLocked = true;
 
+// 従業員キーリスト（ロック解除用）
+const EMPLOYEE_KEYS = ['従0001', '従0002', '従0003'];
+
 // 会員データ
 let members = [
   { id: '1001', name: '山田 太郎', chips: 150, history: [] },
@@ -48,18 +51,32 @@ io.on('connection', (socket) => {
     message: isLocked ? 'システムはロックされています' : 'システムは解除されています'
   });
 
-  // 【iPhone / iPad】QRコードスキャン（会員選択専用）
+  // 【iPhone / iPad】QRコードスキャン処理
   socket.on('scan-qr', (data) => {
     if (!data || !data.code) return;
     const code = data.code.trim();
 
-    // システムロック中は会員QRの受付不可
-    if (isLocked) {
-      socket.emit('error-message', { message: 'システムがロックされています。画面からロック解除を行ってください。' });
+    // 従業員QRコードの場合 -> ロック解除
+    if (EMPLOYEE_KEYS.includes(code)) {
+      isLocked = false;
+      io.emit('system-lock-status', {
+        isLocked: false,
+        message: `ロックを解除しました (担当: ${code})`
+      });
+      io.emit('data-updated', {
+        member: members.find(m => m.id === currentMemberId) || null,
+        products
+      });
       return;
     }
 
-    // 会員コードの検索
+    // ロック中に会員QRコードが読み込まれた場合
+    if (isLocked) {
+      socket.emit('error-message', { message: 'システムがロックされています。従業員QRコードで解除してください。' });
+      return;
+    }
+
+    // 通常の会員コードの検索
     const member = members.find(m => m.id === code);
     if (member) {
       currentMemberId = member.id;
@@ -67,6 +84,17 @@ io.on('connection', (socket) => {
     } else {
       socket.emit('error-message', { message: '該当する会員が見つかりません' });
     }
+  });
+
+  // 【手動操作】システムロックボタンが押されたとき
+  socket.on('lock-system', () => {
+    isLocked = true;
+    currentMemberId = null; // 選択中の会員をリセット
+    io.emit('system-lock-status', {
+      isLocked: true,
+      message: 'システムがロックされました'
+    });
+    io.emit('data-updated', { member: null, products });
   });
 
   // 【member_check.html 専用】残高照会（他端末へ非通知）
@@ -164,20 +192,6 @@ io.on('connection', (socket) => {
       prod.reductionRate = Math.round(((prod.initialStock - prod.currentStock) / prod.initialStock) * 100);
       io.emit('data-updated', { member: members.find(m => m.id === currentMemberId) || null, products });
     }
-  });
-
-  // 手動ロック切替（画面操作用）
-  socket.on('lock-system', () => {
-    isLocked = true;
-    currentMemberId = null;
-    io.emit('system-lock-status', { isLocked: true, message: '手動操作によりシステムがロックされました' });
-    io.emit('data-updated', { member: null, products });
-  });
-
-  // 手動ロック解除（画面操作用）
-  socket.on('unlock-system', () => {
-    isLocked = false;
-    io.emit('system-lock-status', { isLocked: false, message: 'ロックが解除されました' });
   });
 });
 
