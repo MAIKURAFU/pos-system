@@ -18,11 +18,11 @@ let isLocked = true;
 // 従業員キーリスト（ロック解除用）
 const EMPLOYEE_KEYS = ['従0001', '従0002', '従0003'];
 
-// 会員データ（初期データ）
+// 会員データ（初期データ: nameを削除）
 let members = [
-  { id: '1001', name: '山田 太郎', chips: 150, history: [] },
-  { id: '1002', name: '佐藤 花子', chips: 300, history: [] },
-  { id: '1003', name: '鈴木 一郎', chips: 50, history: [] }
+  { id: '1001', chips: 150, history: [] },
+  { id: '1002', chips: 300, history: [] },
+  { id: '1003', chips: 50, history: [] }
 ];
 
 // 景品（商品）データ
@@ -41,20 +41,29 @@ function isNumeric(val) {
   return /^\d+$/.test(val);
 }
 
-// 会員取得または自動生成を行う関数
+// 会員取得または自動生成を行う関数（数字のみなら全承認、名前なし）
 function getOrCreateMember(code) {
   let member = members.find(m => m.id === code);
   // 数字のみのコードで未登録の場合は動的に新規会員を生成
   if (!member && isNumeric(code)) {
     member = {
       id: code,
-      name: `会員 No.${code}`,
       chips: 0,
       history: []
     };
     members.push(member);
   }
   return member;
+}
+
+// 日本標準時（JST）の時刻文字列（HH:MM）を取得するヘルパー関数
+function getJSTTimeString() {
+  return new Date().toLocaleTimeString('ja-JP', {
+    timeZone: 'Asia/Tokyo',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  });
 }
 
 io.on('connection', (socket) => {
@@ -173,8 +182,8 @@ io.on('connection', (socket) => {
       }
     });
 
-    const now = new Date();
-    const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+    // 日本標準時（JST）で時刻を記録
+    const timeStr = getJSTTimeString();
 
     member.history.unshift({
       time: timeStr,
