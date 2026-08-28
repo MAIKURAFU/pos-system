@@ -18,7 +18,7 @@ let isLocked = true;
 // 従業員キーリスト（ロック解除用）
 const EMPLOYEE_KEYS = ['従0001', '従0002', '従0003'];
 
-// 会員データ
+// 会員データ（初期データ）
 let members = [
   { id: '1001', name: '山田 太郎', chips: 150, history: [] },
   { id: '1002', name: '佐藤 花子', chips: 300, history: [] },
@@ -35,6 +35,27 @@ let products = [
 
 // 現在選択中の会員ID
 let currentMemberId = null;
+
+// 数字のみかどうかを判定するヘルパー関数
+function isNumeric(val) {
+  return /^\d+$/.test(val);
+}
+
+// 会員取得または自動生成を行う関数
+function getOrCreateMember(code) {
+  let member = members.find(m => m.id === code);
+  // 数字のみのコードで未登録の場合は動的に新規会員を生成
+  if (!member && isNumeric(code)) {
+    member = {
+      id: code,
+      name: `会員 No.${code}`,
+      chips: 0,
+      history: []
+    };
+    members.push(member);
+  }
+  return member;
+}
 
 io.on('connection', (socket) => {
   // 初回接続時にデータを送信
@@ -76,13 +97,13 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // 通常の会員コードの検索
-    const member = members.find(m => m.id === code);
+    // 数字のみのQRコードであれば全て会員として処理（マスターに無ければ自動生成）
+    const member = getOrCreateMember(code);
     if (member) {
       currentMemberId = member.id;
       io.emit('member-scanned', { member });
     } else {
-      socket.emit('error-message', { message: '該当する会員が見つかりません' });
+      socket.emit('error-message', { message: '無効なQRコード形式です（数字のみのコードを指定してください）' });
     }
   });
 
@@ -97,16 +118,16 @@ io.on('connection', (socket) => {
     io.emit('data-updated', { member: null, products });
   });
 
-  // 【member_check.html 専用】残高照会（他端末へ非通知）
+  // 【member_check.html 専用】残高照会（数字のみなら全て可、他端末へは非通知）
   socket.on('check-member-balance', (data) => {
     if (!data || !data.code) return;
     const code = data.code.trim();
 
-    const member = members.find(m => m.id === code);
+    const member = getOrCreateMember(code);
     if (member) {
       socket.emit('member-balance-result', { success: true, member });
     } else {
-      socket.emit('member-balance-result', { success: false, message: '該当する会員が見つかりません' });
+      socket.emit('member-balance-result', { success: false, message: '無効なQRコード形式です' });
     }
   });
 
