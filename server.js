@@ -9,23 +9,23 @@ const io = new Server(server);
 
 const PORT = process.env.PORT || 3000;
 
-// 静的ファイルの提供
+// 静的ファイルの提供（publicフォルダ内のhtml等を配信）
 app.use(express.static(path.join(__dirname, 'public')));
 
-// システムロック状態
-let isLocked = false;
+// ★ システムロック初期状態（起動時・最初からロック画面にするため true に設定）
+let isLocked = true;
 
 // 従業員キーリスト
 const EMPLOYEE_KEYS = ['従0001', '従0002', '従0003'];
 
-// ダミー会員データ
+// 会員データ
 let members = [
   { id: '1001', name: '山田 太郎', chips: 150, history: [] },
   { id: '1002', name: '佐藤 花子', chips: 300, history: [] },
   { id: '1003', name: '鈴木 一郎', chips: 50, history: [] }
 ];
 
-// ダミー景品（商品）データ
+// 景品（商品）データ
 let products = [
   { id: 'p1', name: 'ポテトチップス', category: 'お菓子', price: 10, currentStock: 20, initialStock: 20, reductionRate: 0 },
   { id: 'p2', name: '缶コーラ', category: 'ドリンク', price: 15, currentStock: 15, initialStock: 15, reductionRate: 0 },
@@ -37,7 +37,7 @@ let products = [
 let currentMemberId = null;
 
 io.on('connection', (socket) => {
-  // 初回接続時にデータを送信
+  // 初回接続時に初期状態を送信
   const currentMember = members.find(m => m.id === currentMemberId) || null;
   socket.emit('init-data', {
     products,
@@ -45,31 +45,39 @@ io.on('connection', (socket) => {
     member: currentMember
   });
 
-  // 【iPhone / iPad】QRコードスキャン（レジ連携用）
+  // ロック状態を各クライアントに個別に通知（ipad.html等の初期表示用）
+  socket.emit('system-lock-status', {
+    isLocked,
+    message: isLocked ? 'システムは現在ロックされています' : 'システムは解除されています'
+  });
+
+  // 【iPhone / iPad】QRコードスキャン（レジ・システム制御用）
   socket.on('scan-qr', (data) => {
     if (!data || !data.code) return;
     const code = data.code.trim();
 
-    // 従業員キーの場合はシステムロック制御
+    // 従業員キーの場合はシステムロック切り替え（トグル）
     if (EMPLOYEE_KEYS.includes(code)) {
       isLocked = !isLocked;
       if (isLocked) {
-        currentMemberId = null;
+        currentMemberId = null; // ロック時は選択中の会員を解除
       }
+
       io.emit('system-lock-status', {
         isLocked,
         message: isLocked ? `システムをロックしました (担当: ${code})` : `ロックを解除しました (担当: ${code})`
       });
+
       io.emit('data-updated', {
-        member: null,
+        member: isLocked ? null : (members.find(m => m.id === currentMemberId) || null),
         products
       });
       return;
     }
 
-    // システムロック中は操作不可
+    // システムロック中は会員QRコードの操作不可
     if (isLocked) {
-      socket.emit('error-message', { message: 'システムがロックされています' });
+      socket.emit('error-message', { message: 'システムがロックされています。従業員キーで解除してください。' });
       return;
     }
 
@@ -83,14 +91,14 @@ io.on('connection', (socket) => {
     }
   });
 
-  // 【member_check.html 専用】残高照会（他端末へは非通知・送信元のみに返答）
+  // 【member_check.html 専用】残高照会（iPadやiPhoneのレジ画面等には影響せず、送信元のみに返信）
   socket.on('check-member-balance', (data) => {
     if (!data || !data.code) return;
     const code = data.code.trim();
 
     const member = members.find(m => m.id === code);
     if (member) {
-      // 送信元のソケットだけに直接返信（他端末には干渉しない）
+      // 送信元のソケット（member_check.html）だけに直接返信
       socket.emit('member-balance-result', { success: true, member });
     } else {
       socket.emit('member-balance-result', { success: false, message: '該当する会員が見つかりません' });
@@ -110,7 +118,7 @@ io.on('connection', (socket) => {
   // 景品交換（購入）処理
   socket.on('purchase-items', (data) => {
     if (isLocked) return socket.emit('error-message', { message: 'システムがロックされています' });
-    
+
     const member = members.find(m => m.id === data.memberId);
     if (!member) return socket.emit('error-message', { message: '会員情報が見つかりません' });
 
@@ -131,7 +139,7 @@ io.on('connection', (socket) => {
       return socket.emit('error-message', { message: 'チップ数が不足しています' });
     }
 
-    // 処理実行
+    // 処理実行（チップ引落・在庫減少）
     member.chips -= totalCost;
     data.cartItems.forEach(item => {
       const prod = products.find(p => p.id === item.id);
@@ -143,7 +151,7 @@ io.on('connection', (socket) => {
 
     const now = new Date();
     const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-    
+
     member.history.unshift({
       time: timeStr,
       items: itemSummary.join(', '),
@@ -183,7 +191,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  // 手動ロックリクエスト
+  // 手動ロックリクエスト（iPad等からの画面ロック操作）
   socket.on('lock-system', () => {
     isLocked = true;
     currentMemberId = null;
