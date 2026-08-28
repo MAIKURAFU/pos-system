@@ -158,6 +158,17 @@
       requestAnimationFrame(tick);
     }
 
+    function triggerVibration() {
+      // Android / 標準Web API
+      if ("vibrate" in navigator) {
+        navigator.vibrate([100, 50, 100]);
+      }
+      // iOS / Safari (Taptic Engine)
+      if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.haptic) {
+        window.webkit.messageHandlers.haptic.postMessage("medium");
+      }
+    }
+
     function onCodeScanned(scannedData) {
       isScanning = false;
       lastScannedCode = scannedData;
@@ -179,13 +190,13 @@
       // server.js 側の受信形式 { code: ... } に合わせて送信
       socket.emit('scan-qr', { code: trimmedData });
 
-      // バイブレーション（対応端末のみ）
-      if (navigator.vibrate) navigator.vibrate(100);
+      // バイブレーションを実行
+      triggerVibration();
     }
 
     // ロック状態変更（従業員キー読み取り時など）の通知を受け取る
     socket.on('system-lock-status', (data) => {
-      // alert()を使わずにテキスト領域に通知を表示し、即座に待機状態に復帰する
+      // alert()を使わずにテキスト領域に通知を表示し、即座に待機状態に復復する
       statusTag.innerText = data.isLocked ? "ロック完了" : "ロック解除成功";
       resultText.innerText = data.message || "システム状態が変更されました";
       

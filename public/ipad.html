@@ -318,8 +318,9 @@
         currentMember.history.forEach(h => {
           const itemDiv = document.createElement('div');
           itemDiv.className = 'history-item';
+          const staffText = h.staffId ? ` | 担当: ${h.staffId}` : '';
           itemDiv.innerHTML = `
-            <div class="history-time">⏰ ${h.time}</div>
+            <div class="history-time">⏰ ${h.time}${staffText}</div>
             <div style="font-weight:bold; color:#111827;">${h.items}</div>
             <div style="color:#ef4444; font-weight:bold; text-align:right; margin-top:2px;">-${h.cost} チップ</div>
           `;
@@ -506,8 +507,9 @@
         currentMember.history.forEach(h => {
           const itemDiv = document.createElement('div');
           itemDiv.className = 'history-item';
+          const staffText = h.staffId ? ` | 担当: ${h.staffId}` : '';
           itemDiv.innerHTML = `
-            <div class="history-time">⏰ ${h.time}</div>
+            <div class="history-time">⏰ ${h.time}${staffText}</div>
             <div style="font-weight:bold; color:#111827;">${h.items}</div>
             <div style="color:#ef4444; font-weight:bold; text-align:right; margin-top:2px;">-${h.cost} チップ</div>
           `;
