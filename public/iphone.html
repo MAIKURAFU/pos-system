@@ -3,78 +3,76 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>iPhone QRスキャナー</title>
+  <title>会員スキャナー</title>
   <script src="/socket.io/socket.io.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jsqr/dist/jsQR.js"></script>
   <style>
     * { box-sizing: border-box; font-family: -apple-system, sans-serif; }
-    body { margin: 0; padding: 0; background: #000; color: #fff; text-align: center; overflow: hidden; }
+    body { margin: 0; padding: 0; background: #0f172a; color: #fff; text-align: center; overflow: hidden; }
     
     .container { display: flex; flex-direction: column; height: 100vh; justify-content: space-between; padding: 20px 15px; }
-    header h1 { font-size: 20px; margin: 0; color: #10b981; }
-    header p { font-size: 13px; color: #aaa; margin-top: 5px; }
+    header h1 { font-size: 20px; margin: 0; color: #38bdf8; }
+    header p { font-size: 13px; color: #94a3b8; margin-top: 5px; }
 
-    /* カメラ映像・スキャンエリア */
     .scanner-container {
       position: relative;
       width: 100%;
       max-width: 360px;
-      height: 360px;
+      height: 320px;
       margin: 0 auto;
       border-radius: 16px;
       overflow: hidden;
-      background: #111;
-      border: 2px solid #333;
+      background: #000;
+      border: 2px solid #334155;
     }
     video { width: 100%; height: 100%; object-fit: cover; }
     
-    /* 読み取りフレームガイド */
     .scan-guide {
       position: absolute;
       top: 50%; left: 50%;
       transform: translate(-50%, -50%);
-      width: 220px; height: 220px;
-      border: 3px solid #10b981;
+      width: 200px; height: 200px;
+      border: 3px solid #38bdf8;
       border-radius: 12px;
       box-shadow: 0 0 0 4000px rgba(0, 0, 0, 0.5);
       pointer-events: none;
     }
 
-    /* 結果通知エリア */
     .result-card {
       background: #1e293b;
       border-radius: 12px;
       padding: 15px;
       margin-top: 10px;
-      min-height: 80px;
+      min-height: 120px;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
     }
-    .result-text { font-size: 16px; font-weight: bold; color: #38bdf8; word-break: break-all; }
-    
     .status-tag {
       font-size: 12px;
       padding: 4px 10px;
       border-radius: 12px;
       background: #334155;
       color: #94a3b8;
-      margin-bottom: 5px;
+      margin-bottom: 8px;
     }
-    .status-tag.active { background: #059669; color: #fff; }
+    .status-tag.active { background: #0284c7; color: #fff; }
 
-    /* リセット（連続スキャン）用手動ボタン */
+    .result-text { font-size: 16px; font-weight: bold; margin: 8px 0; }
+    
     .reset-btn {
-      margin-top: 8px;
-      background: #475569;
+      margin-top: 10px;
+      background: #0284c7;
       color: #fff;
       border: none;
-      border-radius: 6px;
-      padding: 6px 12px;
-      font-size: 12px;
+      border-radius: 8px;
+      padding: 10px 20px;
+      font-size: 14px;
+      font-weight: bold;
       cursor: pointer;
     }
+    .reset-btn:active { background: #0369a1; }
   </style>
 </head>
 <body>
@@ -82,7 +80,7 @@
   <div class="container">
     <header>
       <h1>会員QRスキャナー</h1>
-      <p>会員証または従業員QRコードをかざしてください</p>
+      <p>レジへ連携する会員QRコードをかざしてください</p>
     </header>
 
     <div class="scanner-container">
@@ -92,9 +90,9 @@
     </div>
 
     <div class="result-card">
-      <div id="statusTag" class="status-tag">読み取り開始</div>
-      <div id="resultText" class="result-text">QRコードを読み取ってください</div>
-      <button id="resetBtn" class="reset-btn" style="display:none;" onclick="resetToWaitState()">次のQRを読み取る</button>
+      <div id="statusTag" class="status-tag">読み取り待機中</div>
+      <div id="resultText" class="result-text">カメラにQRコードをかざしてください</div>
+      <button id="nextScanBtn" class="reset-btn" style="display:none;" onclick="resetToWaitState()">次のQRコードを読み取る</button>
     </div>
   </div>
 
@@ -103,17 +101,13 @@
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
-    const resultText = document.getElementById('resultText');
     const statusTag = document.getElementById('statusTag');
-    const resetBtn = document.getElementById('resetBtn');
+    const resultText = document.getElementById('resultText');
+    const nextScanBtn = document.getElementById('nextScanBtn');
 
     let isScanning = true;
-    let lastScannedCode = null;
 
-    // 従業員キー一覧
-    const EMPLOYEE_KEYS = ['従0001', '従0002', '従0003'];
-
-    // 背面カメラを起動
+    // 背面カメラ起動
     async function startCamera() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -133,13 +127,13 @@
           video.play();
           requestAnimationFrame(tick);
         } catch (e) {
-          resultText.innerText = 'カメラの起動に失敗しました。';
+          resultText.innerText = "カメラの起動に失敗しました";
         }
       }
     }
 
     function tick() {
-      if (video.readyState === video.HAVE_ENOUGH_DATA) {
+      if (video.readyState === video.HAVE_ENOUGH_DATA && isScanning) {
         canvas.height = video.videoHeight;
         canvas.width = video.videoWidth;
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -149,90 +143,59 @@
           inversionAttempts: "dontInvert",
         });
 
-        if (code && isScanning) {
-          if (code.data !== lastScannedCode) {
-            onCodeScanned(code.data);
-          }
+        // 読み取り成功時の処理（isScanningで即座にロック）
+        if (code && code.data) {
+          onCodeScanned(code.data);
         }
       }
       requestAnimationFrame(tick);
     }
 
     function triggerVibration() {
-      // Android / 標準Web API
       if ("vibrate" in navigator) {
         navigator.vibrate([100, 50, 100]);
-      }
-      // iOS / Safari (Taptic Engine)
-      if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.haptic) {
-        window.webkit.messageHandlers.haptic.postMessage("medium");
       }
     }
 
     function onCodeScanned(scannedData) {
+      // 連打・ループ防止：最初にフラグを折る
       isScanning = false;
-      lastScannedCode = scannedData;
-
-      statusTag.innerText = "送信完了！";
-      statusTag.classList.add('active');
 
       const trimmedData = scannedData.trim();
+      statusTag.innerText = "送信中";
+      statusTag.classList.add('active');
+      resultText.innerText = `コード読み取り: ${trimmedData}`;
 
-      // 従業員キーか一般会員コードかで表示を切り替え
-      if (EMPLOYEE_KEYS.includes(trimmedData)) {
-        resultText.innerText = `従業員キー: ${trimmedData}`;
-      } else {
-        resultText.innerText = `会員ID: ${trimmedData}`;
-      }
-
-      resetBtn.style.display = 'inline-block';
-
-      // server.js 側の受信形式 { code: ... } に合わせて送信
+      // サーバーへ送信
       socket.emit('scan-qr', { code: trimmedData });
 
-      // バイブレーションを実行
       triggerVibration();
+      nextScanBtn.style.display = "inline-block";
     }
 
-    // ロック状態変更（従業員キー読み取り時など）の通知を受け取る
-    socket.on('system-lock-status', (data) => {
-      // alert()を使わずにテキスト領域に通知を表示し、即座に待機状態に復復する
-      statusTag.innerText = data.isLocked ? "ロック完了" : "ロック解除成功";
-      resultText.innerText = data.message || "システム状態が変更されました";
-      
-      setTimeout(() => {
-        resetToWaitState();
-      }, 1500);
-    });
-
-    // 会員情報が存在しない場合やロック中のエラーハンドリング
-    socket.on('error-message', (res) => {
+    // サーバーからのエラー応答（未登録会員・ロック中など）
+    socket.on('error-message', (data) => {
       statusTag.innerText = "エラー";
       statusTag.classList.remove('active');
-      resultText.innerText = res.message;
-      
-      setTimeout(() => {
-        resetToWaitState();
-      }, 2000);
+      resultText.innerText = data.message || "エラーが発生しました";
     });
 
-    // 景品交換完了や選択解除時にスキャン待機に戻す
-    socket.on('data-updated', (data) => {
-      if (!data.member) {
-        resetToWaitState();
-      }
+    // 会員読み取り完了の通知
+    socket.on('member-scanned', (data) => {
+      statusTag.innerText = "連携完了";
+      statusTag.classList.add('active');
+      resultText.innerText = `${data.member.name} 様 を連携しました`;
     });
 
+    // 待機状態に戻す
     function resetToWaitState() {
-      isScanning = true;
-      lastScannedCode = null;
-      statusTag.innerText = "読み取り開始";
+      statusTag.innerText = "読み取り待機中";
       statusTag.classList.remove('active');
-      resultText.innerText = "QRコードを読み取ってください";
-      resetBtn.style.display = 'none';
+      resultText.innerText = "カメラにQRコードをかざしてください";
+      nextScanBtn.style.display = "none";
+      isScanning = true; // スキャン再開
     }
 
-    // 画面ロード時にカメラ起動
     window.addEventListener('load', startCamera);
   </script>
 </body>

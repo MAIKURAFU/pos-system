@@ -9,14 +9,11 @@ const io = new Server(server);
 
 const PORT = process.env.PORT || 3000;
 
-// 静的ファイルの提供（publicフォルダ内のhtml等を配信）
+// 静的ファイルの提供
 app.use(express.static(path.join(__dirname, 'public')));
 
-// ★ システムロック初期状態（起動時・最初からロック画面にするため true に設定）
+// システムロック初期状態（起動時はロック状態）
 let isLocked = true;
-
-// 従業員キーリスト
-const EMPLOYEE_KEYS = ['従0001', '従0002', '従0003'];
 
 // 会員データ
 let members = [
@@ -37,7 +34,7 @@ let products = [
 let currentMemberId = null;
 
 io.on('connection', (socket) => {
-  // 初回接続時に初期状態を送信
+  // 初回接続時にデータを送信
   const currentMember = members.find(m => m.id === currentMemberId) || null;
   socket.emit('init-data', {
     products,
@@ -45,39 +42,20 @@ io.on('connection', (socket) => {
     member: currentMember
   });
 
-  // ロック状態を各クライアントに個別に通知（ipad.html等の初期表示用）
+  // 初期ロック状態を通知
   socket.emit('system-lock-status', {
     isLocked,
-    message: isLocked ? 'システムは現在ロックされています' : 'システムは解除されています'
+    message: isLocked ? 'システムはロックされています' : 'システムは解除されています'
   });
 
-  // 【iPhone / iPad】QRコードスキャン（レジ・システム制御用）
+  // 【iPhone / iPad】QRコードスキャン（会員選択専用）
   socket.on('scan-qr', (data) => {
     if (!data || !data.code) return;
     const code = data.code.trim();
 
-    // 従業員キーの場合はシステムロック切り替え（トグル）
-    if (EMPLOYEE_KEYS.includes(code)) {
-      isLocked = !isLocked;
-      if (isLocked) {
-        currentMemberId = null; // ロック時は選択中の会員を解除
-      }
-
-      io.emit('system-lock-status', {
-        isLocked,
-        message: isLocked ? `システムをロックしました (担当: ${code})` : `ロックを解除しました (担当: ${code})`
-      });
-
-      io.emit('data-updated', {
-        member: isLocked ? null : (members.find(m => m.id === currentMemberId) || null),
-        products
-      });
-      return;
-    }
-
-    // システムロック中は会員QRコードの操作不可
+    // システムロック中は会員QRの受付不可
     if (isLocked) {
-      socket.emit('error-message', { message: 'システムがロックされています。従業員キーで解除してください。' });
+      socket.emit('error-message', { message: 'システムがロックされています。画面からロック解除を行ってください。' });
       return;
     }
 
@@ -91,14 +69,13 @@ io.on('connection', (socket) => {
     }
   });
 
-  // 【member_check.html 専用】残高照会（iPadやiPhoneのレジ画面等には影響せず、送信元のみに返信）
+  // 【member_check.html 専用】残高照会（他端末へ非通知）
   socket.on('check-member-balance', (data) => {
     if (!data || !data.code) return;
     const code = data.code.trim();
 
     const member = members.find(m => m.id === code);
     if (member) {
-      // 送信元のソケット（member_check.html）だけに直接返信
       socket.emit('member-balance-result', { success: true, member });
     } else {
       socket.emit('member-balance-result', { success: false, message: '該当する会員が見つかりません' });
@@ -125,7 +102,6 @@ io.on('connection', (socket) => {
     let totalCost = 0;
     const itemSummary = [];
 
-    // 在庫・必要チップ数チェック
     for (const item of data.cartItems) {
       const prod = products.find(p => p.id === item.id);
       if (!prod || prod.currentStock < item.quantity) {
@@ -139,7 +115,6 @@ io.on('connection', (socket) => {
       return socket.emit('error-message', { message: 'チップ数が不足しています' });
     }
 
-    // 処理実行（チップ引落・在庫減少）
     member.chips -= totalCost;
     data.cartItems.forEach(item => {
       const prod = products.find(p => p.id === item.id);
@@ -191,12 +166,18 @@ io.on('connection', (socket) => {
     }
   });
 
-  // 手動ロックリクエスト（iPad等からの画面ロック操作）
+  // 手動ロック切替（画面操作用）
   socket.on('lock-system', () => {
     isLocked = true;
     currentMemberId = null;
     io.emit('system-lock-status', { isLocked: true, message: '手動操作によりシステムがロックされました' });
     io.emit('data-updated', { member: null, products });
+  });
+
+  // 手動ロック解除（画面操作用）
+  socket.on('unlock-system', () => {
+    isLocked = false;
+    io.emit('system-lock-status', { isLocked: false, message: 'ロックが解除されました' });
   });
 });
 
