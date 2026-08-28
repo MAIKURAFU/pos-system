@@ -11,6 +11,17 @@ const io = new Server(server);
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ---------------------------------------------------------
+// ルーティング設定（/ で ipad.html、/iphone で iphone.html を返す）
+// ---------------------------------------------------------
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'ipad.html'));
+});
+
+app.get('/iphone', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'iphone.html'));
+});
+
+// ---------------------------------------------------------
 // メモリ内データストア（永続化が必要な場合は DB/JSON ファイル等へ変更）
 // ---------------------------------------------------------
 let isLocked = true; // 起動時はデフォルトでロック状態
@@ -249,11 +260,13 @@ io.on('connection', (socket) => {
   });
 });
 
-// サーバー起動
+// ---------------------------------------------------------
+// サーバー起動処理
+// ---------------------------------------------------------
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`=================================`);
   console.log(` レジ管理サーバーが起動しました`);
-  console.log(` http://localhost:${PORT}`);
+  console.log(` Port: ${PORT}`);
   console.log(`=================================`);
 });
