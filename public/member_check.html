@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>会員コイン確認</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr/dist/jsQR.js"></script>
+  <style>
+    * { box-sizing: border-box; font-family: -apple-system, sans-serif; }
+    body { margin: 0; padding: 0; background: #000; color: #fff; text-align: center; overflow: hidden; }
+    
+    .container { display: flex; flex-direction: column; height: 100vh; justify-content: space-between; padding: 20px 15px; }
+    header h1 { font-size: 20px; margin: 0; color: #38bdf8; }
+    header p { font-size: 13px; color: #aaa; margin-top: 5px; }
+
+    /* カメラ映像・スキャンエリア */
+    .scanner-container {
+      position: relative;
+      width: 100%;
+      max-width: 360px;
+      height: 320px;
+      margin: 0 auto;
+      border-radius: 16px;
+      overflow: hidden;
+      background: #111;
+      border: 2px solid #333;
+    }
+    video { width: 100%; height: 100%; object-fit: cover; }
+    
+    /* 読み取りフレームガイド */
+    .scan-guide {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 200px; height: 200px;
+      border: 3px solid #38bdf8;
+      border-radius: 12px;
+      box-shadow: 0 0 0 4000px rgba(0, 0, 0, 0.5);
+      pointer-events: none;
+    }
+
+    /* 結果通知エリア */
+    .result-card {
+      background: #1e293b;
+      border-radius: 12px;
+      padding: 15px;
+      margin-top: 10px;
+      min-height: 120px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .status-tag {
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 12px;
+      background: #334155;
+      color: #94a3b8;
+      margin-bottom: 8px;
+    }
+    .status-tag.active { background: #0284c7; color: #fff; }
+
+    .member-name { font-size: 18px; font-weight: bold; color: #fff; margin-bottom: 4px; }
+    .chip-container { margin: 6px 0; }
+    .chip-label { font-size: 12px; color: #94a3b8; }
+    .chip-count { font-size: 36px; font-weight: bold; color: #38bdf8; line-height: 1.2; }
+    
+    /* リセット（連続スキャン）用ボタン */
+    .reset-btn {
+      margin-top: 10px;
+      background: #475569;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 8px 16px;
+      font-size: 13px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <header>
+      <h1>会員コイン確認</h1>
+      <p>会員QRコードをカメラにかざしてください</p>
+    </header>
+
+    <div class="scanner-container">
+      <video id="video" playsinline></video>
+      <canvas id="canvas" hidden></canvas>
+      <div class="scan-guide"></div>
+    </div>
+
+    <div class="result-card">
+      <div id="statusTag" class="status-tag">読み取り待機中</div>
+      <div id="resultContent">
+        <div style="font-size: 15px; color: #94a3b8; margin: 10px 0;">QRコードを読み取ると所持コインが表示されます</div>
+      </div>
+      <button id="resetBtn" class="reset-btn" style="display:none;" onclick="resetToWaitState()">別の会員を読み取る</button>
+    </div>
+  </div>
+
+  <script>
+    const socket = io();
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const statusTag = document.getElementById('statusTag');
+    const resultContent = document.getElementById('resultContent');
+    const resetBtn = document.getElementById('resetBtn');
+
+    let isScanning = true;
+    let lastScannedCode = null;
+
+    // 背面カメラを起動
+    async function startCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { exact: "environment" } }
+        });
+        video.srcObject = stream;
+        video.setAttribute('playsinline', true);
+        video.play();
+        requestAnimationFrame(tick);
+      } catch (err) {
+        try {
+          const fallbackStream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: "environment" }
+          });
+          video.srcObject = fallbackStream;
+          video.setAttribute('playsinline', true);
+          video.play();
+          requestAnimationFrame(tick);
+        } catch (e) {
+          resultContent.innerHTML = '<div style="color:#ef4444;">カメラの起動に失敗しました</div>';
+        }
+      }
+    }
+
+    function tick() {
+      if (video.readyState === video.HAVE_ENOUGH_DATA) {
+        canvas.height = video.videoHeight;
+        canvas.width = video.videoWidth;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(imageData.data, imageData.width, imageData.height, {
+          inversionAttempts: "dontInvert",
+        });
+
+        if (code && isScanning) {
+          if (code.data !== lastScannedCode) {
+            onCodeScanned(code.data);
+          }
+        }
+      }
+      requestAnimationFrame(tick);
+    }
+
+    function triggerVibration() {
+      if ("vibrate" in navigator) {
+        navigator.vibrate([100, 50, 100]);
+      }
+      if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.haptic) {
+        window.webkit.messageHandlers.haptic.postMessage("medium");
+      }
+    }
+
+    function onCodeScanned(scannedData) {
+      isScanning = false;
+      lastScannedCode = scannedData;
+
+      const trimmedData = scannedData.trim();
+      statusTag.innerText = "照会中...";
+      statusTag.classList.add('active');
+
+      // サーバーへスキャン通知（会員情報の受領待機）
+      socket.emit('scan-qr', { code: trimmedData });
+
+      triggerVibration();
+    }
+
+    // 会員スキャン成功時の応答を受信
+    socket.on('member-scanned', (data) => {
+      if (data && data.member) {
+        showMemberInfo(data.member);
+      }
+    });
+
+    // 会員情報の更新イベント（チップ数の変更時など）
+    socket.on('member-updated', (data) => {
+      if (!isScanning && data && data.member && data.member.id === lastScannedCode) {
+        showMemberInfo(data.member);
+      }
+    });
+
+    function showMemberInfo(member) {
+      statusTag.innerText = "照会完了";
+      statusTag.classList.add('active');
+
+      resultContent.innerHTML = `
+        <div class="member-name">${member.name} 様 <span style="font-size:12px; color:#94a3b8; font-weight:normal;">(ID: ${member.id})</span></div>
+        <div class="chip-container">
+          <div class="chip-label">現在の所持コイン（チップ）</div>
+          <div class="chip-count">${member.chips} <span style="font-size:18px;">枚</span></div>
+        </div>
+      `;
+
+      resetBtn.style.display = 'inline-block';
+    }
+
+    // エラーハンドリング（該当会員が存在しない場合など）
+    socket.on('error-message', (res) => {
+      if (!isScanning) {
+        statusTag.innerText = "エラー";
+        statusTag.classList.remove('active');
+        resultContent.innerHTML = `<div style="color:#ef4444; font-weight:bold; margin: 10px 0;">${res.message}</div>`;
+        resetBtn.style.display = 'inline-block';
+      }
+    });
+
+    function resetToWaitState() {
+      isScanning = true;
+      lastScannedCode = null;
+      statusTag.innerText = "読み取り待機中";
+      statusTag.classList.remove('active');
+      resultContent.innerHTML = '<div style="font-size: 15px; color: #94a3b8; margin: 10px 0;">QRコードを読み取ると所持コインが表示されます</div>';
+      resetBtn.style.display = 'none';
+    }
+
+    window.addEventListener('load', startCamera);
+  </script>
+</body>
+</html>
