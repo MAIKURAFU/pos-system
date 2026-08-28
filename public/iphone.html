@@ -82,7 +82,7 @@
   <div class="container">
     <header>
       <h1>会員QRスキャナー</h1>
-      <p>会員証のQRコードを枠内にかざしてください</p>
+      <p>会員証または従業員QRコードをかざしてください</p>
     </header>
 
     <div class="scanner-container">
@@ -110,7 +110,10 @@
     let isScanning = true;
     let lastScannedCode = null;
 
-    // 背面カメラを直接起動
+    // 従業員キー一覧
+    const EMPLOYEE_KEYS = ['従0001', '従0002', '従0003'];
+
+    // 背面カメラを起動
     async function startCamera() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -161,23 +164,41 @@
 
       statusTag.innerText = "送信完了！";
       statusTag.classList.add('active');
-      resultText.innerText = `会員ID: ${scannedData}`;
+
+      const trimmedData = scannedData.trim();
+
+      // 従業員キーか一般会員コードかで表示を切り替え
+      if (EMPLOYEE_KEYS.includes(trimmedData)) {
+        resultText.innerText = `従業員キー: ${trimmedData}`;
+      } else {
+        resultText.innerText = `会員ID: ${trimmedData}`;
+      }
+
       resetBtn.style.display = 'inline-block';
 
-      // サーバー側の期待するイベント名 'scan-qr' に修正
-      socket.emit('scan-qr', { memberId: scannedData });
+      // server.js 側の受信形式 { code: ... } に合わせて送信
+      socket.emit('scan-qr', { code: trimmedData });
 
       // バイブレーション（対応端末のみ）
       if (navigator.vibrate) navigator.vibrate(100);
     }
 
-    // 会員情報が存在しない場合などのエラーハンドリング
+    // ロック状態変更（従業員キー読み取り時など）の通知を受け取る
+    socket.on('system-lock-status', (data) => {
+      alert(data.message);
+      // 従業員操作後は自動的にスキャン待機に戻す
+      setTimeout(() => {
+        resetToWaitState();
+      }, 500);
+    });
+
+    // 会員情報が存在しない場合やロック中のエラーハンドリング
     socket.on('error-message', (res) => {
       alert(res.message);
       resetToWaitState();
     });
 
-    // 交換完了やデータの更新（iPadでの選択解除等）を検知したらスキャン待機状態に戻す
+    // 景品交換完了や選択解除時にスキャン待機に戻す
     socket.on('data-updated', (data) => {
       if (!data.member) {
         resetToWaitState();
