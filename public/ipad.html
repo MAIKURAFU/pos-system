@@ -306,7 +306,7 @@
       statusDiv.setAttribute('onclick', 'openMemberHistoryModal()');
       statusDiv.innerHTML = `
         <button class="clear-member-btn" onclick="event.stopPropagation(); clearMember();">✕ 選択解除</button>
-        <h2 style="margin:0; text-decoration: underline;">${currentMember.name} (ID: ${currentMember.id})</h2>
+        <h2 style="margin:0; text-decoration: underline;">ID: ${currentMember.id}</h2>
         <div style="margin-top:5px; font-size:12px; color:#6366f1;">👆 タップで全履歴を表示</div>
         <div style="margin-top:5px; font-size:14px; color:#4b5563;">現在の所持チップ</div>
         <div class="chip-badge">${currentMember.chips} 枚</div>`;
@@ -495,7 +495,7 @@
     function openMemberHistoryModal() {
       if (!currentMember) return;
 
-      document.getElementById('modalMemberTitle').innerText = `${currentMember.name} の購入履歴`;
+      document.getElementById('modalMemberTitle').innerText = `会員 ID: ${currentMember.id} の購入履歴`;
       document.getElementById('modalMemberSubtitle').innerText = `会員ID: ${currentMember.id} | 所持チップ: ${currentMember.chips}枚`;
 
       const listDiv = document.getElementById('modalHistoryList');

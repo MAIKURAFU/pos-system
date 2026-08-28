@@ -180,11 +180,11 @@
       resultText.innerText = data.message || "エラーが発生しました";
     });
 
-    // 会員読み取り完了の通知
+    // 会員読み取り完了の通知（名前ではなくIDを表示）
     socket.on('member-scanned', (data) => {
       statusTag.innerText = "連携完了";
       statusTag.classList.add('active');
-      resultText.innerText = `${data.member.name} 様 を連携しました`;
+      resultText.innerText = `ID: ${data.member.id} を連携しました`;
     });
 
     // 待機状態に戻す
