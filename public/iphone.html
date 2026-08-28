@@ -133,7 +133,7 @@
           video.play();
           requestAnimationFrame(tick);
         } catch (e) {
-          alert('カメラの起動に失敗しました。カメラの利用権限を許可してください。');
+          resultText.innerText = 'カメラの起動に失敗しました。';
         }
       }
     }
@@ -185,17 +185,24 @@
 
     // ロック状態変更（従業員キー読み取り時など）の通知を受け取る
     socket.on('system-lock-status', (data) => {
-      alert(data.message);
-      // 従業員操作後は自動的にスキャン待機に戻す
+      // alert()を使わずにテキスト領域に通知を表示し、即座に待機状態に復帰する
+      statusTag.innerText = data.isLocked ? "ロック完了" : "ロック解除成功";
+      resultText.innerText = data.message || "システム状態が変更されました";
+      
       setTimeout(() => {
         resetToWaitState();
-      }, 500);
+      }, 1500);
     });
 
     // 会員情報が存在しない場合やロック中のエラーハンドリング
     socket.on('error-message', (res) => {
-      alert(res.message);
-      resetToWaitState();
+      statusTag.innerText = "エラー";
+      statusTag.classList.remove('active');
+      resultText.innerText = res.message;
+      
+      setTimeout(() => {
+        resetToWaitState();
+      }, 2000);
     });
 
     // 景品交換完了や選択解除時にスキャン待機に戻す
