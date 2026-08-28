@@ -67,7 +67,7 @@
     .chip-label { font-size: 12px; color: #94a3b8; }
     .chip-count { font-size: 36px; font-weight: bold; color: #38bdf8; line-height: 1.2; }
     
-    /* リセット（連続スキャン）用ボタン */
+    /* リセット用ボタン */
     .reset-btn {
       margin-top: 10px;
       background: #475569;
@@ -178,23 +178,21 @@
       statusTag.innerText = "照会中...";
       statusTag.classList.add('active');
 
-      // サーバーへスキャン通知（会員情報の受領待機）
-      socket.emit('scan-qr', { code: trimmedData });
+      // 残高照会専用の通信（他端末には送信されません）
+      socket.emit('check-member-balance', { code: trimmedData });
 
       triggerVibration();
     }
 
-    // 会員スキャン成功時の応答を受信
-    socket.on('member-scanned', (data) => {
-      if (data && data.member) {
-        showMemberInfo(data.member);
-      }
-    });
-
-    // 会員情報の更新イベント（チップ数の変更時など）
-    socket.on('member-updated', (data) => {
-      if (!isScanning && data && data.member && data.member.id === lastScannedCode) {
-        showMemberInfo(data.member);
+    // 残高照会の結果受信（送信元のみ受け取る）
+    socket.on('member-balance-result', (res) => {
+      if (res.success && res.member) {
+        showMemberInfo(res.member);
+      } else {
+        statusTag.innerText = "エラー";
+        statusTag.classList.remove('active');
+        resultContent.innerHTML = `<div style="color:#ef4444; font-weight:bold; margin: 10px 0;">${res.message || '会員が見つかりません'}</div>`;
+        resetBtn.style.display = 'inline-block';
       }
     });
 
@@ -212,16 +210,6 @@
 
       resetBtn.style.display = 'inline-block';
     }
-
-    // エラーハンドリング（該当会員が存在しない場合など）
-    socket.on('error-message', (res) => {
-      if (!isScanning) {
-        statusTag.innerText = "エラー";
-        statusTag.classList.remove('active');
-        resultContent.innerHTML = `<div style="color:#ef4444; font-weight:bold; margin: 10px 0;">${res.message}</div>`;
-        resetBtn.style.display = 'inline-block';
-      }
-    });
 
     function resetToWaitState() {
       isScanning = true;
