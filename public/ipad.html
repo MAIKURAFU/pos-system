@@ -95,10 +95,11 @@
     
     <h3 style="margin: 0 0 8px 0;">チップチャージ</h3>
     <div class="btn-group">
+      <button class="btn charge-btn" onclick="chargeChips(1)" disabled>+ 1 枚</button>
       <button class="btn charge-btn" onclick="chargeChips(10)" disabled>+ 10 枚</button>
       <button class="btn charge-btn" onclick="chargeChips(50)" disabled>+ 50 枚</button>
       <button class="btn charge-btn" onclick="chargeChips(100)" disabled>+ 100 枚</button>
-      <button class="btn charge-btn" onclick="chargeChips(500)" disabled>+ 500 枚</button>
+      <button class="btn charge-btn" onclick="chargeChips(500)" disabled style="grid-column: span 2;">+ 500 枚</button>
     </div>
 
     <!-- 購入履歴エリア -->
@@ -288,7 +289,6 @@
       renderProducts();
     }
 
-    // 会員表示処理（undefined防止の安全化を実施）
     function renderMember() {
       const statusDiv = document.getElementById('memberStatus');
       const hList = document.getElementById('historyList');
@@ -310,7 +310,6 @@
       statusDiv.className = 'status-card active';
       statusDiv.setAttribute('onclick', 'openMemberHistoryModal()');
 
-      // IDおよびチップの変数を安全に取得
       const displayId = currentMember.id || currentMember.memberId || currentMember.code || '不明';
       const displayChips = currentMember.chips !== undefined ? currentMember.chips : 0;
 
@@ -330,7 +329,6 @@
           itemDiv.className = 'history-item';
           const staffText = h.staffId ? ` | 担当: ${h.staffId}` : '';
           
-          // 履歴オブジェクトのプロパティの揺れに対応
           const itemName = h.items || h.item || h.name || '商品情報なし';
           const itemCost = h.cost !== undefined ? h.cost : (h.amount || h.price || 0);
           const itemTime = h.time || h.timestamp || '日時不明';
@@ -510,7 +508,6 @@
       closeModal('editProductModal');
     }
 
-    // 会員詳細モーダルの安全化
     function openMemberHistoryModal() {
       if (!currentMember) return;
 
