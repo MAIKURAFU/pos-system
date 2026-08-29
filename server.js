@@ -33,7 +33,7 @@ let members = [
 // 景品（商品）データ（初期データは空）
 let products = [];
 
-// 現在選択中の会員ID
+// 現在選択中の会員ID（iPadレジ側で選択中の会員）
 let currentMemberId = null;
 
 // 数字のみかどうかを判定するヘルパー関数
@@ -84,7 +84,7 @@ io.on('connection', (socket) => {
     message: isLocked ? 'システムはロックされています' : 'システムは解除されています'
   });
 
-  // 【iPhone / iPad】QRコードスキャン処理
+  // 【iPhone / iPad】QRコードスキャン処理（レジ用）
   socket.on('scan-qr', (data) => {
     if (!data || !data.code) return;
     const code = data.code.trim();
@@ -167,7 +167,7 @@ io.on('connection', (socket) => {
     io.emit('data-updated', { member: null, products });
   });
 
-  // 残高照会 ＆ 入場ログ追加処理
+  // 【会員コイン確認画面用】残高照会 ＆ 入場ログ追加処理
   socket.on('check-member-balance', (data) => {
     if (!data || !data.code) return;
     const code = data.code.trim();
@@ -187,14 +187,10 @@ io.on('connection', (socket) => {
           cost: 0,
           staffId: null
         });
-
-        // ログが更新されたため最新状態を同期
-        io.emit('data-updated', {
-          member: members.find(m => m.id === currentMemberId) || null,
-          products
-        });
       }
 
+      // iPadレジ端末へブロードキャスト通知を行わず、
+      // リクエストを送ってきた端末(member_check.html)だけに結果を返却する
       socket.emit('member-balance-result', { success: true, member });
     } else {
       socket.emit('member-balance-result', { success: false, message: '無効なQRコード形式です' });

@@ -108,6 +108,7 @@
     }
     .status-tag.active { background: #0284c7; color: #fff; }
     .status-tag.success { background: #10b981; color: #fff; }
+    .status-tag.checkout { background: #f59e0b; color: #fff; } /* 退場時の色（オレンジ）を追加 */
     .status-tag.error { background: #ef4444; color: #fff; }
 
     .result-text { font-size: 15px; font-weight: bold; margin: 6px 0; word-break: break-all; }
@@ -168,6 +169,9 @@
     let isScanning = true;
     let currentMode = 'member'; // 'member' または 'restock'
     let autoResetTimer = null;
+
+    // --- 各会員の入退場状態を保持するマップ (key: 会員コード, value: 'entered' | 'exited') ---
+    const memberStateMap = new Map();
 
     // --- 誤読防止用バッファ変数 ---
     let lastCandidateCode = "";
@@ -377,12 +381,21 @@
       statusTag.className = "status-tag active";
 
       if (currentMode === 'member') {
-        playBeepSound('success');
-        resultText.innerText = `読み取りコード: ${trimmedData}`;
+        // --- 入退場状態のトグル判定 (未入場/退場中なら入場、入場中なら退場) ---
+        const currentState = memberStateMap.get(trimmedData) || 'exited';
+        const isEntering = (currentState === 'exited');
+        const actionType = isEntering ? 'check-in' : 'check-out';
         
-        // サーバーへ送信（従業員ロック解除・会員選択の双方に対応）
+        // 状態を反転して保存
+        memberStateMap.set(trimmedData, isEntering ? 'entered' : 'exited');
+
+        playBeepSound('success');
+        resultText.innerText = `読み取りコード: ${trimmedData} (${isEntering ? '入場' : '退場'})`;
+        
+        // サーバーへ送信（actionプロパティを追加しつつ、既存のcodeプロパティも維持）
         socket.emit('scan-qr', { 
-          code: trimmedData 
+          code: trimmedData,
+          action: actionType
         });
       } else if (currentMode === 'restock') {
         playBeepSound('restock');

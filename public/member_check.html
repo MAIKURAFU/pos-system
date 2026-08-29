@@ -178,10 +178,7 @@
       statusTag.innerText = "照会中...";
       statusTag.classList.add('active');
 
-      // 1. iPadレジおよび全システムへQRデータを通知（従業員ロック解除・レジ会員選択用）
-      socket.emit('scan-qr', { code: trimmedData });
-
-      // 2. 本iPhone画面用の残高照会・入場ログ記録処理
+      // 本iPhone画面用の残高照会・入場ログ記録処理のみを実行（iPadレジへ通知する scan-qr は発行しない）
       socket.emit('check-member-balance', { code: trimmedData });
 
       triggerVibration();
