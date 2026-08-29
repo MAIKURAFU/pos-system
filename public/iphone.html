@@ -3,22 +3,44 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>会員スキャナー</title>
+  <title>iPhoneスキャナー</title>
   <script src="/socket.io/socket.io.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jsqr/dist/jsQR.js"></script>
   <style>
     * { box-sizing: border-box; font-family: -apple-system, sans-serif; }
     body { margin: 0; padding: 0; background: #0f172a; color: #fff; text-align: center; overflow: hidden; }
     
-    .container { display: flex; flex-direction: column; height: 100vh; justify-content: space-between; padding: 20px 15px; }
-    header h1 { font-size: 20px; margin: 0; color: #38bdf8; }
-    header p { font-size: 13px; color: #94a3b8; margin-top: 5px; }
+    .container { display: flex; flex-direction: column; height: 100vh; justify-content: space-between; padding: 15px; }
+    
+    /* タブ切り替えUI */
+    .tab-container {
+      display: flex;
+      background: #1e293b;
+      border-radius: 12px;
+      padding: 4px;
+      margin-bottom: 10px;
+    }
+    .tab-btn {
+      flex: 1;
+      padding: 10px;
+      border: none;
+      background: transparent;
+      color: #94a3b8;
+      font-size: 14px;
+      font-weight: bold;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    .tab-btn.active {
+      background: #38bdf8;
+      color: #0f172a;
+    }
 
     .scanner-container {
       position: relative;
       width: 100%;
       max-width: 360px;
-      height: 320px;
+      height: 280px;
       margin: 0 auto;
       border-radius: 16px;
       overflow: hidden;
@@ -38,12 +60,31 @@
       pointer-events: none;
     }
 
+    .restock-controls {
+      margin-top: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+    .restock-controls label { font-size: 14px; color: #94a3b8; }
+    .restock-controls input {
+      width: 80px;
+      padding: 8px;
+      border-radius: 6px;
+      border: 1px solid #334155;
+      background: #0f172a;
+      color: #fff;
+      font-size: 16px;
+      text-align: center;
+    }
+
     .result-card {
       background: #1e293b;
       border-radius: 12px;
       padding: 15px;
       margin-top: 10px;
-      min-height: 120px;
+      min-height: 110px;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -55,19 +96,21 @@
       border-radius: 12px;
       background: #334155;
       color: #94a3b8;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
     }
     .status-tag.active { background: #0284c7; color: #fff; }
+    .status-tag.success { background: #10b981; color: #fff; }
+    .status-tag.error { background: #ef4444; color: #fff; }
 
-    .result-text { font-size: 16px; font-weight: bold; margin: 8px 0; }
+    .result-text { font-size: 15px; font-weight: bold; margin: 6px 0; }
     
     .reset-btn {
-      margin-top: 10px;
+      margin-top: 6px;
       background: #0284c7;
       color: #fff;
       border: none;
       border-radius: 8px;
-      padding: 10px 20px;
+      padding: 8px 18px;
       font-size: 14px;
       font-weight: bold;
       cursor: pointer;
@@ -79,8 +122,11 @@
 
   <div class="container">
     <header>
-      <h1>会員QRスキャナー</h1>
-      <p>レジへ連携する会員QRコードをかざしてください</p>
+      <!-- タブ切り替えボタン -->
+      <div class="tab-container">
+        <button id="tabMember" class="tab-btn active" onclick="switchMode('member')">会員スキャン</button>
+        <button id="tabRestock" class="tab-btn" onclick="switchMode('restock')">在庫補充</button>
+      </div>
     </header>
 
     <div class="scanner-container">
@@ -89,10 +135,16 @@
       <div class="scan-guide"></div>
     </div>
 
+    <!-- 在庫補充用：一度に補充する個数の設定 -->
+    <div id="restockInputArea" class="restock-controls" style="display: none;">
+      <label for="restockAmount">補充数量:</label>
+      <input type="number" id="restockAmount" value="1" min="1" max="999">
+    </div>
+
     <div class="result-card">
       <div id="statusTag" class="status-tag">読み取り待機中</div>
-      <div id="resultText" class="result-text">カメラにQRコードをかざしてください</div>
-      <button id="nextScanBtn" class="reset-btn" style="display:none;" onclick="resetToWaitState()">次のQRコードを読み取る</button>
+      <div id="resultText" class="result-text">カメラにコードをかざしてください</div>
+      <button id="nextScanBtn" class="reset-btn" style="display:none;" onclick="resetToWaitState()">次のコードを読み取る</button>
     </div>
   </div>
 
@@ -104,10 +156,51 @@
     const statusTag = document.getElementById('statusTag');
     const resultText = document.getElementById('resultText');
     const nextScanBtn = document.getElementById('nextScanBtn');
+    const restockInputArea = document.getElementById('restockInputArea');
 
     let isScanning = true;
+    let currentMode = 'member'; // 'member' または 'restock'
 
-    // 背面カメラ起動
+    // Web Audio API によるスキャン音の再生（iOS対応）
+    let audioCtx = null;
+    function playBeepSound() {
+      try {
+        if (!audioCtx) {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === 'suspended') {
+          audioCtx.resume();
+        }
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(2000, audioCtx.currentTime); // 2000Hzの高音ビープ
+        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.1); // 0.1秒間再生
+      } catch (e) {
+        console.error("Audio play error", e);
+      }
+
+      // バイブレーション（Android等対応用）
+      if ("vibrate" in navigator) {
+        navigator.vibrate([100, 50, 100]);
+      }
+    }
+
+    // モード切り替え処理
+    function switchMode(mode) {
+      currentMode = mode;
+      document.getElementById('tabMember').classList.toggle('active', mode === 'member');
+      document.getElementById('tabRestock').classList.toggle('active', mode === 'restock');
+      
+      restockInputArea.style.display = (mode === 'restock') ? 'flex' : 'none';
+      resetToWaitState();
+    }
+
+    // カメラ起動
     async function startCamera() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -143,7 +236,6 @@
           inversionAttempts: "dontInvert",
         });
 
-        // 読み取り成功時の処理（isScanningで即座にロック）
         if (code && code.data) {
           onCodeScanned(code.data);
         }
@@ -151,49 +243,58 @@
       requestAnimationFrame(tick);
     }
 
-    function triggerVibration() {
-      if ("vibrate" in navigator) {
-        navigator.vibrate([100, 50, 100]);
-      }
-    }
-
     function onCodeScanned(scannedData) {
-      // 連打・ループ防止：最初にフラグを折る
       isScanning = false;
+      playBeepSound(); // スキャン成功音を鳴らす
 
       const trimmedData = scannedData.trim();
-      statusTag.innerText = "送信中";
-      statusTag.classList.add('active');
-      resultText.innerText = `コード読み取り: ${trimmedData}`;
+      statusTag.innerText = "処理中";
+      statusTag.className = "status-tag active";
 
-      // サーバーへ送信
-      socket.emit('scan-qr', { code: trimmedData });
+      if (currentMode === 'member') {
+        // 会員スキャン処理
+        resultText.innerText = `コード読み取り: ${trimmedData}`;
+        socket.emit('scan-qr', { code: trimmedData });
+      } else if (currentMode === 'restock') {
+        // 在庫補充処理
+        const amountInput = document.getElementById('restockAmount');
+        const amount = parseInt(amountInput.value, 10) || 1;
+        
+        resultText.innerText = `商品ID: ${trimmedData} を +${amount}個 補充中`;
+        socket.emit('restock-item', { productId: trimmedData, amount: amount });
+        
+        // 補充成功の画面表示
+        statusTag.innerText = "補充完了";
+        statusTag.className = "status-tag success";
+        resultText.innerText = `商品 [${trimmedData}] を ${amount}個 補充しました`;
+      }
 
-      triggerVibration();
       nextScanBtn.style.display = "inline-block";
     }
 
-    // サーバーからのエラー応答（未登録会員・ロック中など）
+    // サーバーからのエラー応答
     socket.on('error-message', (data) => {
       statusTag.innerText = "エラー";
-      statusTag.classList.remove('active');
+      statusTag.className = "status-tag error";
       resultText.innerText = data.message || "エラーが発生しました";
     });
 
-    // 会員読み取り完了の通知（名前ではなくIDを表示）
+    // 会員読み取り完了の通知
     socket.on('member-scanned', (data) => {
       statusTag.innerText = "連携完了";
-      statusTag.classList.add('active');
+      statusTag.className = "status-tag success";
       resultText.innerText = `ID: ${data.member.id} を連携しました`;
     });
 
     // 待機状態に戻す
     function resetToWaitState() {
       statusTag.innerText = "読み取り待機中";
-      statusTag.classList.remove('active');
-      resultText.innerText = "カメラにQRコードをかざしてください";
+      statusTag.className = "status-tag";
+      resultText.innerText = currentMode === 'member' 
+        ? "カメラに会員QRコードをかざしてください" 
+        : "カメラに商品コード(p1, p2等)をかざしてください";
       nextScanBtn.style.display = "none";
-      isScanning = true; // スキャン再開
+      isScanning = true;
     }
 
     window.addEventListener('load', startCamera);
