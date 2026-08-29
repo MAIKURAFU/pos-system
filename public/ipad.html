@@ -158,7 +158,7 @@
     </div>
   </div>
 
-  <!-- 商品情報編集モーダル -->
+  <!-- 商品情報編集モーダル（カテゴリ設定を追加） -->
   <div class="modal-overlay" id="editProductModal">
     <div class="modal">
       <h3>景品情報の編集</h3>
@@ -166,6 +166,14 @@
       
       <label>景品名</label>
       <input type="text" id="editProductName">
+      
+      <label>ジャンル (カテゴリ)</label>
+      <select id="editProductCategory">
+        <option value="お菓子">お菓子</option>
+        <option value="ドリンク">ドリンク</option>
+        <option value="おもちゃ">おもちゃ</option>
+        <option value="イベント景品">イベント景品</option>
+      </select>
       
       <label>必要チップ数 (価格)</label>
       <input type="number" id="editProductPrice" min="0">
@@ -363,7 +371,7 @@
         card.innerHTML = `
           <div class="rate-badge">減少率 ${reduction}%</div>
           <div onclick="addCart('${p.id}')" style="cursor:pointer; flex:1;">
-            <span class="category-tag">${p.category}</span>
+            <span class="category-tag">${p.category || '未設定'}</span>
             <div style="font-weight:bold; font-size:18px;">${p.name}</div>
             <div style="color:#4b5563; margin-top:4px;">必要: ${p.price} チップ | 在庫: ${p.currentStock}/${p.initialStock}</div>
           </div>
@@ -483,7 +491,7 @@
       productsList.forEach(p => {
         const opt = document.createElement('option');
         opt.value = p.id;
-        opt.innerText = `[${p.category}] ${p.name} (現在在庫: ${p.currentStock})`;
+        opt.innerText = `[${p.category || '未設定'}] ${p.name} (現在在庫: ${p.currentStock})`;
         select.appendChild(opt);
       });
       document.getElementById('restockModal').style.display = 'flex';
@@ -505,6 +513,7 @@
 
       document.getElementById('editProductId').value = p.id;
       document.getElementById('editProductName').value = p.name;
+      document.getElementById('editProductCategory').value = p.category || 'お菓子';
       document.getElementById('editProductPrice').value = p.price;
       document.getElementById('editProductStock').value = p.currentStock;
 
@@ -514,6 +523,7 @@
     function submitProductEdit() {
       const productId = document.getElementById('editProductId').value;
       const name = document.getElementById('editProductName').value.trim();
+      const category = document.getElementById('editProductCategory').value;
       const price = parseInt(document.getElementById('editProductPrice').value, 10);
       const currentStock = parseInt(document.getElementById('editProductStock').value, 10);
 
@@ -521,7 +531,7 @@
         return alert('正しく値を入力してください');
       }
 
-      socket.emit('update-product', { productId, name, price, currentStock });
+      socket.emit('update-product', { productId, name, category, price, currentStock });
       closeModal('editProductModal');
     }
 

@@ -308,11 +308,14 @@
         });
       } catch (err) {
         console.error("Camera start error:", err);
-        resultText.innerText = "カメラの起動に失敗しました";
+        statusTag.innerText = "エラー";
+        statusTag.className = "status-tag error";
+        resultText.innerText = "カメラの起動に失敗しました（アクセス許可を確認してください）";
       }
     }
 
     function onCodeScanned(scannedData) {
+      if (!isScanning) return;
       isScanning = false;
       if (autoResetTimer) clearTimeout(autoResetTimer);
 
