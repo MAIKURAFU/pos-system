@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>iPhoneスキャナー</title>
+  <title>読取機</title>
   <script src="/socket.io/socket.io.js"></script>
   <!-- JANコード・1Dバーコード・QRコード対応ライブラリ ZXing -->
   <script src="https://unpkg.com/@zxing/library@latest"></script>
@@ -428,13 +428,13 @@
 
     // 会員読み取り完了の通知
     socket.on('member-scanned', (data) => {
-      statusTag.innerText = "連携完了";
+      statusTag.innerText = "読取完了";
       statusTag.className = "status-tag success";
 
       const memberObj = data ? (data.member || data) : {};
       const memberId = memberObj.id || memberObj.memberId || memberObj.code || '不明';
 
-      resultText.innerText = `会員ID: ${memberId} を連携しました`;
+      resultText.innerText = `会員ID: ${memberId} を読み取りました`;
 
       autoResetTimer = setTimeout(() => {
         resetToWaitState();
@@ -459,11 +459,11 @@
       if (autoResetTimer) clearTimeout(autoResetTimer);
       candidateCount = 0;
       lastCandidateCode = "";
-      statusTag.innerText = "読み取り待機中";
+      statusTag.innerText = "読取待機中";
       statusTag.className = "status-tag";
       resultText.innerText = currentMode === 'member' 
-        ? "カメラに会員QRコードをかざしてください" 
-        : "カメラにJANバーコードをかざしてください";
+        ? "読取機にQRコードをかざしてください" 
+        : "読取機にバーコードをかざしてください";
       nextScanBtn.style.display = "none";
       isScanning = true;
     }

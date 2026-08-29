@@ -102,7 +102,7 @@ io.on('connection', (socket) => {
 
     // ロック中に会員QRコードが読み込まれた場合
     if (isLocked) {
-      socket.emit('error-message', { message: 'システムがロックされています。従業員QRコードで解除してください。' });
+      socket.emit('error-message', { message: 'システムがロックされています。従業員コードで解除してください。' });
       return;
     }
 
@@ -149,7 +149,7 @@ io.on('connection', (socket) => {
         io.emit('member-scanned', { member });
       }
     } else {
-      socket.emit('error-message', { message: '無効なQRコード形式です（数字のみのコードを指定してください）' });
+      socket.emit('error-message', { message: '無効なQRコードです' });
     }
   });
 
@@ -188,7 +188,7 @@ io.on('connection', (socket) => {
 
       socket.emit('member-balance-result', { success: true, member });
     } else {
-      socket.emit('member-balance-result', { success: false, message: '無効なQRコード形式です' });
+      socket.emit('member-balance-result', { success: false, message: '無効なQRコードです' });
     }
   });
 
@@ -204,7 +204,7 @@ io.on('connection', (socket) => {
       const timeStr = getJSTTimeString(false);
 
       // 増減内容に応じた項目名を設定（プラスならチャージ、マイナスなら調整など）
-      const actionName = amount > 0 ? 'チップチャージ' : 'チップ減額';
+      const actionName = amount > 0 ? '+チップ' : '-チップ減額';
 
       member.history.unshift({
         time: timeStr,

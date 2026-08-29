@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>会員コイン確認</title>
+  <title>入場記録</title>
   <script src="/socket.io/socket.io.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jsqr/dist/jsQR.js"></script>
   <style>
@@ -85,8 +85,8 @@
 
   <div class="container">
     <header>
-      <h1>会員コイン確認</h1>
-      <p>会員QRコードをカメラにかざしてください</p>
+      <h1>入場スキャナー</h1>
+      <p>QRコードをカメラにかざしてください</p>
     </header>
 
     <div class="scanner-container">
@@ -100,7 +100,7 @@
       <div id="resultContent">
         <div style="font-size: 15px; color: #94a3b8; margin: 10px 0;">QRコードを読み取ると所持コインが表示されます</div>
       </div>
-      <button id="resetBtn" class="reset-btn" style="display:none;" onclick="resetToWaitState()">別の会員を読み取る</button>
+      <button id="resetBtn" class="reset-btn" style="display:none;" onclick="resetToWaitState()">別のQRコードを読み取る</button>
     </div>
   </div>
 
@@ -191,7 +191,7 @@
       } else {
         statusTag.innerText = "エラー";
         statusTag.classList.remove('active');
-        resultContent.innerHTML = `<div style="color:#ef4444; font-weight:bold; margin: 10px 0;">${res.message || '会員が見つかりません'}</div>`;
+        resultContent.innerHTML = `<div style="color:#ef4444; font-weight:bold; margin: 10px 0;">${res.message || '登録情報が見つかりません'}</div>`;
         resetBtn.style.display = 'inline-block';
       }
     });
@@ -223,7 +223,7 @@
       resultContent.innerHTML = `
         <div class="member-name">会員ID: ${member.id}</div>
         <div class="chip-container">
-          <div class="chip-label">現在の所持コイン（チップ）</div>
+          <div class="chip-label">現在の所持チップ</div>
           <div class="chip-count">${member.chips} <span style="font-size:18px;">枚</span></div>
         </div>
       `;
@@ -236,7 +236,7 @@
       lastScannedCode = null;
       statusTag.innerText = "読み取り待機中";
       statusTag.classList.remove('active');
-      resultContent.innerHTML = '<div style="font-size: 15px; color: #94a3b8; margin: 10px 0;">QRコードを読み取ると所持コインが表示されます</div>';
+      resultContent.innerHTML = '<div style="font-size: 15px; color: #94a3b8; margin: 10px 0;">QRコードを読み取ると所持チップが表示されます</div>';
       resetBtn.style.display = 'none';
     }
 

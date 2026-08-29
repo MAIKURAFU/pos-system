@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>iPad レジ & チップ管理</title>
+  <title>総合管理システム</title>
   <script src="/socket.io/socket.io.js"></script>
   <style>
     * { box-sizing: border-box; font-family: -apple-system, sans-serif; }
@@ -108,21 +108,21 @@
   <div class="left-panel">
     <div class="status-card" id="memberStatus">
       <h3 style="margin:0; color:#6b7280;">スキャン待機中</h3>
-      <p style="margin:5px 0 0 0; font-size:14px; color:#9ca3af;">iPhoneで会員QRコードを読み取ってください</p>
+      <p style="margin:5px 0 0 0; font-size:14px; color:#9ca3af;">読取機でQRコードを読み取ってください</p>
     </div>
     
     <!-- チップ増減（チャージ／減額）エリア -->
-    <h3 style="margin: 0 0 8px 0;">チップ増減 (チャージ / 減額)</h3>
+    <h3 style="margin: 0 0 8px 0;">チップ管理</h3>
     <div class="btn-group">
       <input type="number" id="chipAmountInput" placeholder="枚数を入力 (例: 10, -5)" disabled style="grid-column: span 2; padding: 10px; border: 1px solid #ccc; border-radius: 8px; font-size: 16px; width: 100%;">
-      <button class="btn charge-btn" id="applyChipBtn" onclick="submitCustomChip()" disabled style="grid-column: span 2;">確定する</button>
+      <button class="btn charge-btn" id="applyChipBtn" onclick="submitCustomChip()" disabled style="grid-column: span 2;">確定</button>
     </div>
 
     <!-- 購入履歴エリア -->
     <div class="history-section">
       <h3 style="margin:0 0 8px 0;">購入履歴</h3>
       <div class="history-list" id="historyList">
-        <div style="color:#9ca3af; text-align:center; margin-top:20px;">会員コードを読み取ると履歴が表示されます</div>
+        <div style="color:#9ca3af; text-align:center; margin-top:20px;">QEコードを読み取ると履歴が表示されます</div>
       </div>
     </div>
   </div>
@@ -130,10 +130,10 @@
   <!-- 右側：商品＆カート -->
   <div class="right-panel">
     <div class="header-row">
-      <h2 style="margin:0;">景品一覧</h2>
+      <h2 style="margin:0;">商品一覧</h2>
       <div style="display:flex; gap:8px;">
         <button class="manage-btn" onclick="openManageModal()">📊 管理</button>
-        <button class="restock-btn" onclick="openRestockModal()">📦 在庫を追加する</button>
+        <button class="restock-btn" onclick="openRestockModal()">📦 在庫追加</button>
         <button class="restock-btn" style="background:#ef4444;" onclick="requestLock()">🔒 システムロック</button>
       </div>
     </div>
@@ -141,36 +141,36 @@
     <!-- カテゴリ選択タブ -->
     <div class="category-tabs">
       <button class="tab-btn active" onclick="filterCategory('すべて')">すべて</button>
-      <button class="tab-btn" onclick="filterCategory('お菓子')">お菓子</button>
-      <button class="tab-btn" onclick="filterCategory('ドリンク')">ドリンク</button>
-      <button class="tab-btn" onclick="filterCategory('おもちゃ')">おもちゃ</button>
-      <button class="tab-btn" onclick="filterCategory('イベント景品')">イベント景品</button>
+      <button class="tab-btn" onclick="filterCategory('菓子類')">菓子類</button>
+      <button class="tab-btn" onclick="filterCategory('飲料')">飲料</button>
+      <button class="tab-btn" onclick="filterCategory('その他')">その他</button>
+      <button class="tab-btn" onclick="filterCategory('イベント')">イベント</button>
     </div>
     
     <div class="product-grid" id="productGrid"></div>
 
     <div class="cart-section">
-      <h3 style="margin:0 0 8px 0; font-size:16px;">選択中の景品 (カート)</h3>
+      <h3 style="margin:0 0 8px 0; font-size:16px;">選択中の商品</h3>
       <div class="cart-list" id="cartList">
-        <div style="color:#9ca3af; font-size:14px;">景品が選択されていません</div>
+        <div style="color:#9ca3af; font-size:14px;">商品が選択されていません</div>
       </div>
       
       <div style="margin-bottom:10px; font-weight:bold; font-size:18px;">
         消費チップ合計: <span id="totalCost" style="color:#ef4444;">0</span> 枚
       </div>
-      <button class="checkout-btn" id="checkoutBtn" onclick="submitPurchase()" disabled>交換を確定する</button>
+      <button class="checkout-btn" id="checkoutBtn" onclick="submitPurchase()" disabled>交換確定</button>
     </div>
   </div>
 
   <!-- 総合管理モーダル -->
   <div class="modal-overlay" id="manageModal">
     <div class="modal manage-modal">
-      <h3 style="margin-bottom: 10px;">総合管理ダッシュボード</h3>
+      <h3 style="margin-bottom: 10px;">総合管理システム</h3>
       <div class="manage-tabs">
-        <button class="manage-tab-btn active" onclick="switchManageTab('sales')">📈 売れ行きランキング</button>
-        <button class="manage-tab-btn" onclick="switchManageTab('stock')">📦 在庫一覧</button>
-        <button class="manage-tab-btn" onclick="switchManageTab('members')">👥 会員一覧</button>
-        <button class="manage-tab-btn" onclick="switchManageTab('attendance')">🚪 本日の入場状況</button>
+        <button class="manage-tab-btn active" onclick="switchManageTab('sales')">販売状況</button>
+        <button class="manage-tab-btn" onclick="switchManageTab('stock')">在庫一覧</button>
+        <button class="manage-tab-btn" onclick="switchManageTab('members')">会員一覧</button>
+        <button class="manage-tab-btn" onclick="switchManageTab('attendance')">入場状況</button>
       </div>
       <div class="manage-content" id="manageModalContent"></div>
       <div style="margin-top: 15px; text-align: right;">
@@ -182,12 +182,12 @@
   <!-- 在庫補充モーダル -->
   <div class="modal-overlay" id="restockModal">
     <div class="modal">
-      <h3>在庫の追加・補充</h3>
+      <h3>在庫の追加</h3>
       <select id="restockProductSelect"></select>
-      <input type="number" id="restockAmount" placeholder="追加する数量 (例: 10)" min="1">
+      <input type="number" id="restockAmount" placeholder="追加数量 (例: 10)" min="1">
       <div style="display:flex; gap:10px; margin-top:15px;">
         <button class="btn" style="background:#6b7280; flex:1;" onclick="closeModal('restockModal')">キャンセル</button>
-        <button class="btn" style="background:#10b981; flex:1;" onclick="submitRestock()">補充実行</button>
+        <button class="btn" style="background:#10b981; flex:1;" onclick="submitRestock()">実行</button>
       </div>
     </div>
   </div>
@@ -195,7 +195,7 @@
   <!-- 商品情報編集モーダル（カテゴリ設定を追加） -->
   <div class="modal-overlay" id="editProductModal">
     <div class="modal">
-      <h3>景品情報の編集</h3>
+      <h3>商品情報の編集</h3>
       <input type="hidden" id="editProductId">
       
       <label>景品名</label>
@@ -203,16 +203,16 @@
       
       <label>ジャンル (カテゴリ)</label>
       <select id="editProductCategory">
-        <option value="お菓子">お菓子</option>
-        <option value="ドリンク">ドリンク</option>
-        <option value="おもちゃ">おもちゃ</option>
-        <option value="イベント景品">イベント景品</option>
+        <option value="菓子類">菓子類</option>
+        <option value="飲料">飲料</option>
+        <option value="その他">その他</option>
+        <option value="イベント">イベント</option>
       </select>
       
-      <label>必要チップ数 (価格)</label>
+      <label>交換価格</label>
       <input type="number" id="editProductPrice" min="0">
       
-      <label>現在の在庫数</label>
+      <label>在庫数</label>
       <input type="number" id="editProductStock" min="0">
 
       <div style="display:flex; gap:10px; margin-top:20px;">
@@ -225,10 +225,10 @@
   <!-- 会員詳細・購入履歴表示モーダル -->
   <div class="modal-overlay" id="memberHistoryModal">
     <div class="modal" style="width:500px;">
-      <h3 id="modalMemberTitle" style="margin-bottom:5px;">会員詳細</h3>
+      <h3 id="modalMemberTitle" style="margin-bottom:5px;">詳細</h3>
       <div id="modalMemberSubtitle" style="color:#6b7280; font-size:14px; margin-bottom:15px;"></div>
       
-      <h4 style="text-align:left; margin:10px 0 5px 0;">全購入・交換履歴</h4>
+      <h4 style="text-align:left; margin:10px 0 5px 0;">交換履歴</h4>
       <div id="modalHistoryList" style="max-height:300px; overflow-y:auto; border:1px solid #e5e7eb; border-radius:8px; padding:10px; background:#fafafa;"></div>
 
       <div style="margin-top:20px;">
@@ -242,7 +242,7 @@
     <div style="text-align: center;">
       <div style="font-size: 64px; margin-bottom: 20px;">🔒</div>
       <h2 style="margin: 0 0 10px 0; font-size: 28px;">システムはロックされています</h2>
-      <p style="color: #9ca3af; font-size: 16px; margin: 0;">iPhoneスキャナーから従業員専用QRコードを読み込んで解除してください</p>
+      <p style="color: #9ca3af; font-size: 16px; margin: 0;">読取機から従業員コードを読み取って解除してください</p>
     </div>
   </div>
 
@@ -343,7 +343,7 @@
 
     function buildHistoryHTML(historyArray) {
       if (!historyArray || historyArray.length === 0) {
-        return '<div style="color:#9ca3af; text-align:center; padding:10px;">購入履歴はありません</div>';
+        return '<div style="color:#9ca3af; text-align:center; padding:10px;">交換履歴がありません</div>';
       }
       return historyArray.map(h => {
         const staffText = h.staffId ? ` | 担当: ${h.staffId}` : '';
@@ -426,7 +426,7 @@
             <div style="color:#4b5563; margin-top:4px;">必要: ${p.price} チップ | 在庫: ${p.currentStock}/${p.initialStock}</div>
           </div>
           <div style="display:flex; justify-content:space-between; align-items:flex-end;">
-            <button class="edit-item-btn" onclick="event.stopPropagation(); openEditModal('${p.id}')">✏️ 編集</button>
+            <button class="edit-item-btn" onclick="event.stopPropagation(); openEditModal('${p.id}')">編集</button>
             ${inCartQty > 0 ? `<div style="color:#10b981; font-weight:bold;">カート内: ${inCartQty} 個</div>` : ''}
           </div>
         `;
@@ -436,7 +436,7 @@
     }
 
     function addCart(id) {
-      if (!currentMember) return alert('会員QRコードを読み取ってください');
+      if (!currentMember) return alert('QRコードを読み取ってください');
       const p = productsList.find(item => item.id === id);
       if (!p) return;
       const currentQty = cart[id] || 0;
@@ -476,7 +476,7 @@
       const keys = Object.keys(cart);
 
       if (keys.length === 0) {
-        list.innerHTML = '<div style="color:#9ca3af; font-size:14px;">景品が選択されていません</div>';
+        list.innerHTML = '<div style="color:#9ca3af; font-size:14px;">商品が選択されていません</div>';
       } else {
         keys.forEach(id => {
           const p = productsList.find(prod => prod.id === id);
@@ -507,7 +507,7 @@
     }
 
     function chargeChips(amount) {
-      if (!currentMember) return alert('会員QRコードを読み取ってください');
+      if (!currentMember) return alert('QRコードを読み取ってください');
 
       const displayChips = currentMember.chips !== undefined ? currentMember.chips : 0;
       if (amount < 0 && (displayChips + amount) < 0) {
@@ -583,7 +583,7 @@
         allMembers.forEach(m => {
           if (m.history) {
             m.history.forEach(h => {
-              if (h.items && h.items !== '入場' && h.items !== '退場' && !h.items.includes('チャージ') && !h.items.includes('減額')) {
+              if (h.items && h.items !== '入場' && h.items !== '退場' && !h.items.includes('増額') && !h.items.includes('減額')) {
                 const parts = h.items.split(',');
                 parts.forEach(part => {
                   const match = part.trim().match(/(.+?)\s*×\s*(\d+)/);
@@ -603,22 +603,22 @@
         const worst = [...sortedSales].reverse().slice(0, 5);
 
         container.innerHTML = `
-          <h4 style="margin:0 0 10px 0;">🏆 売れ行きランキング (Top)</h4>
+          <h4 style="margin:0 0 10px 0;">販売状況(昇順)</h4>
           <table class="data-table">
-            <tr><th>順位</th><th>景品名</th><th>販売数</th></tr>
+            <tr><th>順位</th><th>商品名</th><th>販売数</th></tr>
             ${best.map((item, idx) => `<tr><td>${idx + 1}位</td><td>${item[0]}</td><td>${item[1]} 個</td></tr>`).join('')}
           </table>
 
-          <h4 style="margin:20px 0 10px 0;">📉 ワースト販売ランキング</h4>
+          <h4 style="margin:20px 0 10px 0;">販売状況(降順)</h4>
           <table class="data-table">
-            <tr><th>順位</th><th>景品名</th><th>販売数</th></tr>
+            <tr><th>順位</th><th>商品名</th><th>販売数</th></tr>
             ${worst.map((item, idx) => `<tr><td>${idx + 1}位</td><td>${item[0]}</td><td>${item[1]} 個</td></tr>`).join('')}
           </table>
         `;
       } else if (currentManageTab === 'stock') {
         container.innerHTML = `
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-            <h4 style="margin:0;">📦 在庫一覧</h4>
+            <h4 style="margin:0;">在庫管理</h4>
             <div style="display:flex; gap:6px;">
               <button class="btn" style="padding:4px 10px; font-size:12px;" onclick="renderStockTable('asc')">▲ 在庫が少ない順</button>
               <button class="btn" style="padding:4px 10px; font-size:12px;" onclick="renderStockTable('desc')">▼ 在庫が多い順</button>
@@ -640,9 +640,9 @@
         }).join('');
 
         container.innerHTML = `
-          <h4 style="margin:0 0 10px 0;">👥 登録会員一覧 (${allMembers.length} 名)</h4>
+          <h4 style="margin:0 0 10px 0;">会員一覧 (${allMembers.length} 名)</h4>
           <table class="data-table">
-            <tr><th>会員ID</th><th>所持チップ</th><th>来場回数 (入場ログ数)</th></tr>
+            <tr><th>会員ID</th><th>所持チップ</th><th>来場回数</th></tr>
             ${memberRows || '<tr><td colspan="3" style="text-align:center; color:#9ca3af;">会員データがありません</td></tr>'}
           </table>
         `;
@@ -666,11 +666,11 @@
         container.innerHTML = `
           <div class="stat-card-group">
             <div class="stat-card">
-              <div style="font-size:12px; color:#6b7280;">総登録会員数</div>
+              <div style="font-size:12px; color:#6b7280;">総入場数</div>
               <div class="stat-value">${allMembers.length} 人</div>
             </div>
             <div class="stat-card">
-              <div style="font-size:12px; color:#6b7280;">累計入場・利用会員数</div>
+              <div style="font-size:12px; color:#6b7280;">累計入場数</div>
               <div class="stat-value">${attendedMembers.length} 人</div>
             </div>
             <div class="stat-card">
@@ -679,9 +679,9 @@
             </div>
           </div>
 
-          <h4 style="margin:15px 0 10px 0;">🚪 入場・利用実績のある会員リスト</h4>
+          <h4 style="margin:15px 0 10px 0;">入場履歴のある会員リスト</h4>
           <table class="data-table">
-            <tr><th>会員ID</th><th>現在チップ</th><th>直近のアクション</th><th>時刻</th></tr>
+            <tr><th>会員ID</th><th>現在チップ</th><th>現在の状況</th><th>時刻</th></tr>
             ${attendedMembers.map(am => `
               <tr>
                 <td>ID: ${am.id}</td>
@@ -705,7 +705,7 @@
 
       stockContainer.innerHTML = `
         <table class="data-table">
-          <tr><th>カテゴリ</th><th>景品名</th><th>必要チップ</th><th>現在在庫 / 初期在庫</th><th>減少率</th></tr>
+          <tr><th>カテゴリ</th><th>商品名</th><th>必要チップ</th><th>現在在庫 / 初期在庫</th><th>減少率</th></tr>
           ${sortedProducts.map(p => `
             <tr>
               <td><span class="category-tag">${p.category || '未設定'}</span></td>
@@ -734,7 +734,7 @@
     function submitRestock() {
       const productId = document.getElementById('restockProductSelect').value;
       const amount = parseInt(document.getElementById('restockAmount').value, 10);
-      if (!amount || amount <= 0) return alert('正しく数量を入力してください');
+      if (!amount || amount <= 0) return alert('正しい数量を入力してください');
       
       socket.emit('restock-item', { productId, amount });
       closeModal('restockModal');
@@ -747,7 +747,7 @@
 
       document.getElementById('editProductId').value = p.id;
       document.getElementById('editProductName').value = p.name;
-      document.getElementById('editProductCategory').value = p.category || 'お菓子';
+      document.getElementById('editProductCategory').value = p.category || '菓子類';
       document.getElementById('editProductPrice').value = p.price;
       document.getElementById('editProductStock').value = p.currentStock;
 
@@ -762,7 +762,7 @@
       const currentStock = parseInt(document.getElementById('editProductStock').value, 10);
 
       if (!name || isNaN(price) || isNaN(currentStock)) {
-        return alert('正しく値を入力してください');
+        return alert('正しい値を入力してください');
       }
 
       socket.emit('update-product', { productId, name, category, price, currentStock });
