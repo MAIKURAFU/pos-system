@@ -132,7 +132,7 @@
     <header>
       <!-- タブ切り替えボタン -->
       <div class="tab-container">
-        <button id="tabMember" class="tab-btn active" onclick="switchMode('member')">会員スキャン</button>
+        <button id="tabMember" class="tab-btn active" onclick="switchMode('member')">会員スキャン (QR)</button>
         <button id="tabRestock" class="tab-btn" onclick="switchMode('restock')">在庫補充 (JAN)</button>
       </div>
     </header>
@@ -182,12 +182,10 @@
       let sum = 0;
 
       if (janStr.length === 13) {
-        // JAN-13: 奇数インデックス(偶数桁)×3 + 偶数インデックス(奇数桁)×1
         for (let i = 0; i < digits.length; i++) {
           sum += (i % 2 === 1) ? digits[i] * 3 : digits[i];
         }
       } else {
-        // JAN-8: 偶数インデックス(奇数桁)×3 + 奇数インデックス(偶数桁)×1
         for (let i = 0; i < digits.length; i++) {
           sum += (i % 2 === 0) ? digits[i] * 3 : digits[i];
         }
@@ -292,11 +290,20 @@
 
       const hints = new Map();
       
-      // JANコード専用のフォーマット指定（8桁: EAN_8 / 13桁: EAN_13）
-      const formats = [
-        ZXing.BarcodeFormat.EAN_13,
-        ZXing.BarcodeFormat.EAN_8
-      ];
+      // モード別に読み取るバーコードフォーマットを指定
+      let formats = [];
+      if (currentMode === 'member') {
+        // 会員スキャン：QRコード
+        formats = [
+          ZXing.BarcodeFormat.QR_CODE
+        ];
+      } else {
+        // 在庫補充：JANコード (13桁・8桁)
+        formats = [
+          ZXing.BarcodeFormat.EAN_13,
+          ZXing.BarcodeFormat.EAN_8
+        ];
+      }
       
       hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
       hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
@@ -337,14 +344,16 @@
 
       const trimmedData = scannedData.trim();
 
-      // 1. チェックデジットの計算検証（動いた時の読み間違いによる不正コードを排除）
-      if (!isValidJanCheckDigit(trimmedData)) {
-        candidateCount = 0;
-        lastCandidateCode = "";
-        return;
+      // 在庫補充（JAN）の場合のみチェックデジットを検証
+      if (currentMode === 'restock') {
+        if (!isValidJanCheckDigit(trimmedData)) {
+          candidateCount = 0;
+          lastCandidateCode = "";
+          return;
+        }
       }
 
-      // 2. 複数フレームでの連続一致検証（ブレ対策）
+      // 複数フレームでの連続一致検証（ブレ対策）
       if (trimmedData === lastCandidateCode) {
         candidateCount++;
       } else {
@@ -369,7 +378,7 @@
 
       if (currentMode === 'member') {
         playBeepSound('success');
-        resultText.innerText = `JANコード読み取り: ${trimmedData}`;
+        resultText.innerText = `会員QR読み取り: ${trimmedData}`;
         
         socket.emit('scan-qr', { 
           code: trimmedData,
@@ -430,7 +439,7 @@
       statusTag.innerText = "読み取り待機中";
       statusTag.className = "status-tag";
       resultText.innerText = currentMode === 'member' 
-        ? "カメラにJANコードをかざしてください" 
+        ? "カメラに会員QRコードをかざしてください" 
         : "カメラにJANバーコードをかざしてください";
       nextScanBtn.style.display = "none";
       isScanning = true;
