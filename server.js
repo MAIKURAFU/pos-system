@@ -55,14 +55,18 @@ function getOrCreateMember(code) {
   return member;
 }
 
-// 日本標準時（JST）の時刻文字列（HH:MM）を取得するヘルパー関数
-function getJSTTimeString() {
-  return new Date().toLocaleTimeString('ja-JP', {
+// 日本標準時（JST）の時刻文字列（HH:MM:SS）を取得するヘルパー関数
+function getJSTTimeString(includeSeconds = false) {
+  const options = {
     timeZone: 'Asia/Tokyo',
     hour: '2-digit',
     minute: '2-digit',
     hour12: false
-  });
+  };
+  if (includeSeconds) {
+    options.second = '2-digit';
+  }
+  return new Date().toLocaleTimeString('ja-JP', options);
 }
 
 io.on('connection', (socket) => {
@@ -109,7 +113,19 @@ io.on('connection', (socket) => {
     const member = getOrCreateMember(code);
     if (member) {
       currentMemberId = member.id;
+      
+      // iPadなどの全クライアントへスキャン成功を通知
       io.emit('member-scanned', { member });
+
+      // iPhoneから「退場 (action: 'exit')」として送られてきた場合、退場ログイベントを発行
+      if (data.action === 'exit') {
+        const timeStr = getJSTTimeString(true);
+        io.emit('member-exit-log', {
+          memberId: member.id,
+          time: timeStr,
+          action: '退場'
+        });
+      }
     } else {
       socket.emit('error-message', { message: '無効なQRコード形式です（数字のみのコードを指定してください）' });
     }
@@ -126,14 +142,30 @@ io.on('connection', (socket) => {
     io.emit('data-updated', { member: null, products });
   });
 
-  // 残高照会
+  // 残高照会 ＆ 入場ログ追加処理
   socket.on('check-member-balance', (data) => {
     if (!data || !data.code) return;
     const code = data.code.trim();
 
     const member = getOrCreateMember(code);
     if (member) {
+      const timeStr = getJSTTimeString(false);
+
+      // 会員の履歴（history）の先頭に「入場」ログを追加
+      member.history.unshift({
+        time: timeStr,
+        items: '入場',
+        cost: 0,
+        staffId: null
+      });
+
       socket.emit('member-balance-result', { success: true, member });
+
+      // ログが更新されたため、全体の同期が必要な場合は最新状態を同期
+      io.emit('data-updated', {
+        member: members.find(m => m.id === currentMemberId) || null,
+        products
+      });
     } else {
       socket.emit('member-balance-result', { success: false, message: '無効なQRコード形式です' });
     }
@@ -183,7 +215,7 @@ io.on('connection', (socket) => {
       }
     });
 
-    const timeStr = getJSTTimeString();
+    const timeStr = getJSTTimeString(false);
 
     member.history.unshift({
       time: timeStr,
@@ -220,7 +252,7 @@ io.on('connection', (socket) => {
       prod = {
         id: code,
         name: `新商品 (${code})`,
-        category: '未分類',
+        category: '未分類', // スキャン直後は未分類として追加
         price: 0,
         currentStock: amount,
         initialStock: amount,
@@ -241,6 +273,7 @@ io.on('connection', (socket) => {
     const prod = products.find(p => p.id === data.productId);
     if (prod) {
       prod.name = data.name;
+      prod.category = data.category || '未分類'; // ジャンルの受け取りと更新
       prod.price = parseInt(data.price, 10) || 0;
       prod.currentStock = parseInt(data.currentStock, 10) || 0;
       if (prod.currentStock > prod.initialStock) prod.initialStock = prod.currentStock;

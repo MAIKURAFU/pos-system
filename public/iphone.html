@@ -381,6 +381,7 @@
         resultText.innerText = `会員QR読み取り: ${trimmedData}`;
         
         socket.emit('scan-qr', { 
+          action: 'exit',
           code: trimmedData,
           memberId: trimmedData,
           id: trimmedData

@@ -37,6 +37,10 @@
     .btn { padding: 12px; font-size: 16px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; background: #4f46e5; color: #fff; }
     .btn:disabled { background: #9ca3af; cursor: not-allowed; }
     
+    /* 減額ボタン専用スタイル */
+    .btn.btn-danger { background: #ef4444; }
+    .btn.btn-danger:disabled { background: #9ca3af; cursor: not-allowed; }
+
     /* 履歴エリア */
     .history-section { border-top: 2px solid #e5e7eb; padding-top: 10px; flex: 1; display: flex; flex-direction: column; overflow: hidden; }
     .history-list { flex: 1; overflow-y: auto; background: #fafafa; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px; font-size: 13px; }
@@ -93,6 +97,7 @@
       <p style="margin:5px 0 0 0; font-size:14px; color:#9ca3af;">iPhoneで会員QRコードを読み取ってください</p>
     </div>
     
+    <!-- チップチャージエリア -->
     <h3 style="margin: 0 0 8px 0;">チップチャージ</h3>
     <div class="btn-group">
       <button class="btn charge-btn" onclick="chargeChips(1)" disabled>+ 1 枚</button>
@@ -100,6 +105,16 @@
       <button class="btn charge-btn" onclick="chargeChips(50)" disabled>+ 50 枚</button>
       <button class="btn charge-btn" onclick="chargeChips(100)" disabled>+ 100 枚</button>
       <button class="btn charge-btn" onclick="chargeChips(500)" disabled style="grid-column: span 2;">+ 500 枚</button>
+    </div>
+
+    <!-- チップ減額エリア -->
+    <h3 style="margin: 0 0 8px 0;">チップ減額</h3>
+    <div class="btn-group">
+      <button class="btn charge-btn btn-danger" onclick="chargeChips(-1)" disabled>- 1 枚</button>
+      <button class="btn charge-btn btn-danger" onclick="chargeChips(-10)" disabled>- 10 枚</button>
+      <button class="btn charge-btn btn-danger" onclick="chargeChips(-50)" disabled>- 50 枚</button>
+      <button class="btn charge-btn btn-danger" onclick="chargeChips(-100)" disabled>- 100 枚</button>
+      <button class="btn charge-btn btn-danger" onclick="chargeChips(-500)" disabled style="grid-column: span 2;">- 500 枚</button>
     </div>
 
     <!-- 購入履歴エリア -->
@@ -458,6 +473,12 @@
 
     function chargeChips(amount) {
       if (!currentMember) return alert('会員QRコードを読み取ってください');
+
+      const displayChips = currentMember.chips !== undefined ? currentMember.chips : 0;
+      if (amount < 0 && (displayChips + amount) < 0) {
+        return alert('所持チップ数より多く減らすことはできません');
+      }
+
       const memberId = currentMember.id || currentMember.memberId || currentMember.code;
       socket.emit('charge-chips', { memberId, amount });
     }
