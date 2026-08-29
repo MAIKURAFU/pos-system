@@ -77,6 +77,7 @@
     .btn-del { background: #ef4444; color: white; font-size: 12px; padding: 0 6px; height: 28px; }
 
     .restock-btn { background: #0b9f6e; color: white; border: none; padding: 8px 12px; border-radius: 6px; cursor: pointer; font-weight: bold; }
+    .manage-btn { background: #6366f1; color: white; border: none; padding: 8px 12px; border-radius: 6px; cursor: pointer; font-weight: bold; }
     .checkout-btn { width: 100%; padding: 18px; font-size: 22px; font-weight: bold; background: #10b981; color: white; border: none; border-radius: 10px; cursor: pointer; }
     .checkout-btn:disabled { background: #9ca3af; cursor: not-allowed; }
 
@@ -86,6 +87,19 @@
     .modal h3 { margin-top: 0; }
     .modal label { font-size: 12px; font-weight: bold; color: #4b5563; display: block; margin-top: 10px; text-align: left; }
     .modal input, .modal select { width: 100%; padding: 10px; margin-top: 4px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; }
+
+    /* 総合管理ダッシュボード用モーダル拡張デザイン */
+    .manage-modal { width: 750px; max-width: 95vw; height: 85vh; display: flex; flex-direction: column; }
+    .manage-tabs { display: flex; gap: 6px; border-bottom: 2px solid #e5e7eb; padding-bottom: 8px; margin-bottom: 15px; }
+    .manage-tab-btn { padding: 8px 14px; border: none; background: #f3f4f6; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 14px; color: #4b5563; }
+    .manage-tab-btn.active { background: #6366f1; color: white; }
+    .manage-content { flex: 1; overflow-y: auto; padding-right: 4px; }
+    .stat-card-group { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 15px; }
+    .stat-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; text-align: center; }
+    .stat-value { font-size: 22px; font-weight: bold; color: #312e81; margin-top: 4px; }
+    .data-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+    .data-table th, .data-table td { border: 1px solid #e5e7eb; padding: 8px 10px; text-align: left; }
+    .data-table th { background: #f9fafb; font-weight: bold; color: #374151; }
   </style>
 </head>
 <body>
@@ -118,6 +132,7 @@
     <div class="header-row">
       <h2 style="margin:0;">景品一覧</h2>
       <div style="display:flex; gap:8px;">
+        <button class="manage-btn" onclick="openManageModal()">📊 管理</button>
         <button class="restock-btn" onclick="openRestockModal()">📦 在庫を追加する</button>
         <button class="restock-btn" style="background:#ef4444;" onclick="requestLock()">🔒 システムロック</button>
       </div>
@@ -144,6 +159,23 @@
         消費チップ合計: <span id="totalCost" style="color:#ef4444;">0</span> 枚
       </div>
       <button class="checkout-btn" id="checkoutBtn" onclick="submitPurchase()" disabled>交換を確定する</button>
+    </div>
+  </div>
+
+  <!-- 総合管理モーダル -->
+  <div class="modal-overlay" id="manageModal">
+    <div class="modal manage-modal">
+      <h3 style="margin-bottom: 10px;">総合管理ダッシュボード</h3>
+      <div class="manage-tabs">
+        <button class="manage-tab-btn active" onclick="switchManageTab('sales')">📈 売れ行きランキング</button>
+        <button class="manage-tab-btn" onclick="switchManageTab('stock')">📦 在庫一覧</button>
+        <button class="manage-tab-btn" onclick="switchManageTab('members')">👥 会員一覧</button>
+        <button class="manage-tab-btn" onclick="switchManageTab('attendance')">🚪 本日の入場状況</button>
+      </div>
+      <div class="manage-content" id="manageModalContent"></div>
+      <div style="margin-top: 15px; text-align: right;">
+        <button class="btn" style="background:#6b7280; padding: 8px 20px;" onclick="closeModal('manageModal')">閉じる</button>
+      </div>
     </div>
   </div>
 
@@ -217,6 +249,8 @@
   <script>
     const socket = io();
     let currentMember = null, productsList = [], cart = {}, selectedCategory = 'すべて';
+    let allMembers = []; // 管理画面用の全会員データ保持用
+    let currentManageTab = 'sales';
 
     socket.on('init-data', (data) => {
       productsList = data.products || [];
@@ -265,6 +299,13 @@
     socket.on('toast-message', (res) => alert(res.message));
     socket.on('error-message', (res) => alert(res.message));
 
+    // --- 管理データ受信用のイベントリスナー ---
+    socket.on('manage-data-response', (data) => {
+      allMembers = data.members || [];
+      document.getElementById('manageModal').style.display = 'flex';
+      switchManageTab('sales');
+    });
+
     function requestLock() {
       socket.emit('lock-system');
     }
@@ -310,7 +351,6 @@
         const rawCost = h.cost !== undefined ? h.cost : (h.amount || h.price || 0);
         const itemTime = h.time || h.timestamp || '日時不明';
 
-        // 数値のプラス/マイナス表記調整
         const costVal = Number(rawCost);
         const displayCost = isNaN(costVal) ? rawCost : (costVal > 0 ? `-${costVal}` : `+${Math.abs(costVal)}`);
 
@@ -511,6 +551,172 @@
 
     function closeModal(id) {
       document.getElementById(id).style.display = 'none';
+    }
+
+    function openManageModal() {
+      socket.emit('request-manage-data');
+    }
+
+    function switchManageTab(tabName) {
+      currentManageTab = tabName;
+      document.querySelectorAll('.manage-tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+      });
+      const buttons = document.querySelectorAll('.manage-tab-btn');
+      if (tabName === 'sales' && buttons[0]) buttons[0].classList.add('active');
+      if (tabName === 'stock' && buttons[1]) buttons[1].classList.add('active');
+      if (tabName === 'members' && buttons[2]) buttons[2].classList.add('active');
+      if (tabName === 'attendance' && buttons[3]) buttons[3].classList.add('active');
+
+      renderManageContent();
+    }
+
+    function renderManageContent() {
+      const container = document.getElementById('manageModalContent');
+      if (!container) return;
+      container.innerHTML = '';
+
+      if (currentManageTab === 'sales') {
+        let salesMap = {};
+        productsList.forEach(p => salesMap[p.name] = 0);
+
+        allMembers.forEach(m => {
+          if (m.history) {
+            m.history.forEach(h => {
+              if (h.items && h.items !== '入場' && h.items !== '退場' && !h.items.includes('チャージ') && !h.items.includes('減額')) {
+                const parts = h.items.split(',');
+                parts.forEach(part => {
+                  const match = part.trim().match(/(.+?)\s*×\s*(\d+)/);
+                  if (match) {
+                    const name = match[1].trim();
+                    const qty = parseInt(match[2], 10);
+                    salesMap[name] = (salesMap[name] || 0) + qty;
+                  }
+                });
+              }
+            });
+          }
+        });
+
+        const sortedSales = Object.entries(salesMap).sort((a, b) => b[1] - a[1]);
+        const best = sortedSales.slice(0, 5);
+        const worst = [...sortedSales].reverse().slice(0, 5);
+
+        container.innerHTML = `
+          <h4 style="margin:0 0 10px 0;">🏆 売れ行きランキング (Top)</h4>
+          <table class="data-table">
+            <tr><th>順位</th><th>景品名</th><th>販売数</th></tr>
+            ${best.map((item, idx) => `<tr><td>${idx + 1}位</td><td>${item[0]}</td><td>${item[1]} 個</td></tr>`).join('')}
+          </table>
+
+          <h4 style="margin:20px 0 10px 0;">📉 ワースト販売ランキング</h4>
+          <table class="data-table">
+            <tr><th>順位</th><th>景品名</th><th>販売数</th></tr>
+            ${worst.map((item, idx) => `<tr><td>${idx + 1}位</td><td>${item[0]}</td><td>${item[1]} 個</td></tr>`).join('')}
+          </table>
+        `;
+      } else if (currentManageTab === 'stock') {
+        container.innerHTML = `
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+            <h4 style="margin:0;">📦 在庫一覧</h4>
+            <div style="display:flex; gap:6px;">
+              <button class="btn" style="padding:4px 10px; font-size:12px;" onclick="renderStockTable('asc')">▲ 在庫が少ない順</button>
+              <button class="btn" style="padding:4px 10px; font-size:12px;" onclick="renderStockTable('desc')">▼ 在庫が多い順</button>
+            </div>
+          </div>
+          <div id="stockTableContainer"></div>
+        `;
+        renderStockTable('asc');
+      } else if (currentManageTab === 'members') {
+        const memberRows = allMembers.map(m => {
+          const visitCount = m.history ? m.history.filter(h => h.items === '入場').length : 0;
+          return `
+            <tr>
+              <td>ID: ${m.id}</td>
+              <td>${m.chips} 枚</td>
+              <td>${visitCount} 回</td>
+            </tr>
+          `;
+        }).join('');
+
+        container.innerHTML = `
+          <h4 style="margin:0 0 10px 0;">👥 登録会員一覧 (${allMembers.length} 名)</h4>
+          <table class="data-table">
+            <tr><th>会員ID</th><th>所持チップ</th><th>来場回数 (入場ログ数)</th></tr>
+            ${memberRows || '<tr><td colspan="3" style="text-align:center; color:#9ca3af;">会員データがありません</td></tr>'}
+          </table>
+        `;
+      } else if (currentManageTab === 'attendance') {
+        let attendedMembers = [];
+        allMembers.forEach(m => {
+          if (m.history && m.history.length > 0) {
+            const lastLog = m.history[0];
+            const hasAttendedToday = m.history.some(h => h.items === '入場');
+            if (hasAttendedToday) {
+              attendedMembers.push({
+                id: m.id,
+                chips: m.chips,
+                lastAction: lastLog.items,
+                time: lastLog.time
+              });
+            }
+          }
+        });
+
+        container.innerHTML = `
+          <div class="stat-card-group">
+            <div class="stat-card">
+              <div style="font-size:12px; color:#6b7280;">総登録会員数</div>
+              <div class="stat-value">${allMembers.length} 人</div>
+            </div>
+            <div class="stat-card">
+              <div style="font-size:12px; color:#6b7280;">累計入場・利用会員数</div>
+              <div class="stat-value">${attendedMembers.length} 人</div>
+            </div>
+            <div class="stat-card">
+              <div style="font-size:12px; color:#6b7280;">総所持チップ総額</div>
+              <div class="stat-value">${allMembers.reduce((sum, m) => sum + (m.chips || 0), 0)} 枚</div>
+            </div>
+          </div>
+
+          <h4 style="margin:15px 0 10px 0;">🚪 入場・利用実績のある会員リスト</h4>
+          <table class="data-table">
+            <tr><th>会員ID</th><th>現在チップ</th><th>直近のアクション</th><th>時刻</th></tr>
+            ${attendedMembers.map(am => `
+              <tr>
+                <td>ID: ${am.id}</td>
+                <td>${am.chips} 枚</td>
+                <td><span style="font-weight:bold; color:${am.lastAction === '入場' ? '#10b981' : '#374151'}">${am.lastAction}</span></td>
+                <td>${am.time}</td>
+              </tr>
+            `).join('') || '<tr><td colspan="4" style="text-align:center; color:#9ca3af;">該当データがありません</td></tr>'}
+          </table>
+        `;
+      }
+    }
+
+    function renderStockTable(order) {
+      const sortedProducts = [...productsList].sort((a, b) => {
+        return order === 'asc' ? a.currentStock - b.currentStock : b.currentStock - a.currentStock;
+      });
+
+      const stockContainer = document.getElementById('stockTableContainer');
+      if (!stockContainer) return;
+
+      stockContainer.innerHTML = `
+        <table class="data-table">
+          <tr><th>カテゴリ</th><th>景品名</th><th>必要チップ</th><th>現在在庫 / 初期在庫</th><th>減少率</th></tr>
+          ${sortedProducts.map(p => `
+            <tr>
+              <td><span class="category-tag">${p.category || '未設定'}</span></td>
+              <td><strong>${p.name}</strong></td>
+              <td>${p.price} 枚</td>
+              <td><span style="color:${p.currentStock <= 2 ? '#ef4444; font-weight:bold;' : ''}">${p.currentStock}</span> / ${p.initialStock}</td>
+              <td>${p.reductionRate || 0}%</td>
+            </tr>
+          `).join('')}
+        </table>
+      `;
     }
 
     function openRestockModal() {

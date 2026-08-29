@@ -209,13 +209,10 @@ io.on('connection', (socket) => {
       // 増減内容に応じた項目名を設定（プラスならチャージ、マイナスなら調整など）
       const actionName = amount > 0 ? 'チップチャージ' : 'チップ減額';
 
-      // 履歴の先頭に残高変更（チャージ・減額）ログを追加
-      // ※フロント側の buildHistoryHTML では cost が正の値のときにマイナス表示、負の値のときにプラス表示する仕様になっています
-      // そのため、チャージ(-amount)で「+〇〇枚」、減額(-amount)で「-〇〇枚」のように直感的に表示されるよう調整しています
       member.history.unshift({
         time: timeStr,
         items: actionName,
-        cost: -amount, // フロントの表示仕様に合わせるため反転（正のチャージなら履歴上はプラス表示にするなど）
+        cost: -amount,
         staffId: data.staffId || null
       });
 
@@ -321,6 +318,14 @@ io.on('connection', (socket) => {
         : 0;
       io.emit('data-updated', { member: members.find(m => m.id === currentMemberId) || null, products });
     }
+  });
+
+  // 【追加】総合管理ダッシュボードからのデータ要求への応答処理
+  socket.on('request-manage-data', () => {
+    socket.emit('manage-data-response', {
+      members,
+      products
+    });
   });
 });
 
