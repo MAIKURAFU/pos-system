@@ -25,9 +25,6 @@ const EMPLOYEE_KEYS = ['従0001', '従0002', '従0003'];
 
 // 会員データ（初期チップはすべて0）
 let members = [
-  { id: '1001', chips: 0, history: [] },
-  { id: '1002', chips: 0, history: [] },
-  { id: '1003', chips: 0, history: [] }
 ];
 
 // 景品（商品）データ（初期データは空）
