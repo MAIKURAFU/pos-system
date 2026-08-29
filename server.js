@@ -114,17 +114,42 @@ io.on('connection', (socket) => {
     if (member) {
       currentMemberId = member.id;
       
-      // iPadなどの全クライアントへスキャン成功を通知
-      io.emit('member-scanned', { member });
-
-      // iPhoneから「退場 (action: 'exit')」として送られてきた場合、退場ログイベントを発行
+      // iPhoneから「退場 (action: 'exit')」として送られてきた場合の処理
       if (data.action === 'exit') {
-        const timeStr = getJSTTimeString(true);
+        const lastLog = member.history[0];
+
+        // 直前のログがすでに「退場」の場合は重複ログを記録しない
+        if (lastLog && lastLog.items === '退場') {
+          currentMemberId = null;
+          return;
+        }
+
+        const timeStr = getJSTTimeString(false);
+
+        // 会員の履歴（history）の先頭に「退場」ログを追加
+        member.history.unshift({
+          time: timeStr,
+          items: '退場',
+          cost: 0,
+          staffId: null
+        });
+
+        // 退場処理後は選択中会員を解除
+        currentMemberId = null;
+
+        // 既存の退場用リアルタイム通知イベントを発行
         io.emit('member-exit-log', {
           memberId: member.id,
-          time: timeStr,
+          time: getJSTTimeString(true),
           action: '退場'
         });
+
+        // 全端末（iPad含む）へ更新後のデータを送信
+        io.emit('data-updated', { member: null, products });
+
+      } else {
+        // 通常のスキャン・入場処理
+        io.emit('member-scanned', { member });
       }
     } else {
       socket.emit('error-message', { message: '無効なQRコード形式です（数字のみのコードを指定してください）' });
@@ -149,23 +174,28 @@ io.on('connection', (socket) => {
 
     const member = getOrCreateMember(code);
     if (member) {
-      const timeStr = getJSTTimeString(false);
+      const lastLog = member.history[0];
 
-      // 会員の履歴（history）の先頭に「入場」ログを追加
-      member.history.unshift({
-        time: timeStr,
-        items: '入場',
-        cost: 0,
-        staffId: null
-      });
+      // 直前のログがすでに「入場」でない場合のみ「入場」ログを追加
+      if (!lastLog || lastLog.items !== '入場') {
+        const timeStr = getJSTTimeString(false);
+
+        // 会員の履歴（history）の先頭に「入場」ログを追加
+        member.history.unshift({
+          time: timeStr,
+          items: '入場',
+          cost: 0,
+          staffId: null
+        });
+
+        // ログが更新されたため最新状態を同期
+        io.emit('data-updated', {
+          member: members.find(m => m.id === currentMemberId) || null,
+          products
+        });
+      }
 
       socket.emit('member-balance-result', { success: true, member });
-
-      // ログが更新されたため、全体の同期が必要な場合は最新状態を同期
-      io.emit('data-updated', {
-        member: members.find(m => m.id === currentMemberId) || null,
-        products
-      });
     } else {
       socket.emit('member-balance-result', { success: false, message: '無効なQRコード形式です' });
     }

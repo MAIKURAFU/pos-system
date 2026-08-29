@@ -90,31 +90,18 @@
 </head>
 <body>
 
-  <!-- 左側：会員情報・チャージ・購入履歴 -->
+  <!-- 左側：会員情報・チャージ／減額・購入履歴 -->
   <div class="left-panel">
     <div class="status-card" id="memberStatus">
       <h3 style="margin:0; color:#6b7280;">スキャン待機中</h3>
       <p style="margin:5px 0 0 0; font-size:14px; color:#9ca3af;">iPhoneで会員QRコードを読み取ってください</p>
     </div>
     
-    <!-- チップチャージエリア -->
-    <h3 style="margin: 0 0 8px 0;">チップチャージ</h3>
+    <!-- チップ増減（チャージ／減額）エリア -->
+    <h3 style="margin: 0 0 8px 0;">チップ増減 (チャージ / 減額)</h3>
     <div class="btn-group">
-      <button class="btn charge-btn" onclick="chargeChips(1)" disabled>+ 1 枚</button>
-      <button class="btn charge-btn" onclick="chargeChips(10)" disabled>+ 10 枚</button>
-      <button class="btn charge-btn" onclick="chargeChips(50)" disabled>+ 50 枚</button>
-      <button class="btn charge-btn" onclick="chargeChips(100)" disabled>+ 100 枚</button>
-      <button class="btn charge-btn" onclick="chargeChips(500)" disabled style="grid-column: span 2;">+ 500 枚</button>
-    </div>
-
-    <!-- チップ減額エリア -->
-    <h3 style="margin: 0 0 8px 0;">チップ減額</h3>
-    <div class="btn-group">
-      <button class="btn charge-btn btn-danger" onclick="chargeChips(-1)" disabled>- 1 枚</button>
-      <button class="btn charge-btn btn-danger" onclick="chargeChips(-10)" disabled>- 10 枚</button>
-      <button class="btn charge-btn btn-danger" onclick="chargeChips(-50)" disabled>- 50 枚</button>
-      <button class="btn charge-btn btn-danger" onclick="chargeChips(-100)" disabled>- 100 枚</button>
-      <button class="btn charge-btn btn-danger" onclick="chargeChips(-500)" disabled style="grid-column: span 2;">- 500 枚</button>
+      <input type="number" id="chipAmountInput" placeholder="枚数を入力 (例: 10, -5)" disabled style="grid-column: span 2; padding: 10px; border: 1px solid #ccc; border-radius: 8px; font-size: 16px; width: 100%;">
+      <button class="btn charge-btn" id="applyChipBtn" onclick="submitCustomChip()" disabled style="grid-column: span 2;">確定する</button>
     </div>
 
     <!-- 購入履歴エリア -->
@@ -316,7 +303,8 @@
     function renderMember() {
       const statusDiv = document.getElementById('memberStatus');
       const hList = document.getElementById('historyList');
-      const chargeBtns = document.querySelectorAll('.charge-btn');
+      const chipInput = document.getElementById('chipAmountInput');
+      const applyBtn = document.getElementById('applyChipBtn');
 
       if (!currentMember) {
         statusDiv.className = 'status-card';
@@ -326,11 +314,14 @@
           <p style="margin:5px 0 0 0; font-size:14px; color:#9ca3af;">iPhoneで会員QRコードを読み取ってください</p>`;
         
         hList.innerHTML = '<div style="color:#9ca3af; text-align:center; margin-top:20px;">会員コードを読み取ると履歴が表示されます</div>';
-        chargeBtns.forEach(btn => btn.disabled = true);
+        if (chipInput) { chipInput.disabled = true; chipInput.value = ''; }
+        if (applyBtn) applyBtn.disabled = true;
         return;
       }
 
-      chargeBtns.forEach(btn => btn.disabled = false);
+      if (chipInput) chipInput.disabled = false;
+      if (applyBtn) applyBtn.disabled = false;
+
       statusDiv.className = 'status-card active';
       statusDiv.setAttribute('onclick', 'openMemberHistoryModal()');
 
@@ -481,6 +472,18 @@
 
       const memberId = currentMember.id || currentMember.memberId || currentMember.code;
       socket.emit('charge-chips', { memberId, amount });
+    }
+
+    function submitCustomChip() {
+      const input = document.getElementById('chipAmountInput');
+      const val = parseInt(input.value, 10);
+
+      if (isNaN(val) || val === 0) {
+        return alert('正確な枚数を入力してください');
+      }
+
+      chargeChips(val);
+      input.value = '';
     }
 
     function submitPurchase() {
