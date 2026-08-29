@@ -108,7 +108,7 @@
     }
     .status-tag.active { background: #0284c7; color: #fff; }
     .status-tag.success { background: #10b981; color: #fff; }
-    .status-tag.checkout { background: #f59e0b; color: #fff; } /* 退場時の色（オレンジ）を追加 */
+    .status-tag.checkout { background: #f59e0b; color: #fff; }
     .status-tag.error { background: #ef4444; color: #fff; }
 
     .result-text { font-size: 15px; font-weight: bold; margin: 6px 0; word-break: break-all; }
@@ -178,13 +178,12 @@
     let candidateCount = 0;
     const REQUIRED_MATCH_COUNT = 2; // 確定に必要な連続一致回数（ブレ対策）
 
-    // --- 会員QRコードの形式検証関数（誤読防止・正しいコードの確実なフィルタリング） ---
+    // --- 会員QRコードの形式検証関数 ---
     function isValidMemberQR(qrStr) {
       if (!qrStr || typeof qrStr !== 'string') return false;
-      // 例: 会員IDの形式が特定の長さやプレフィックス（例: "M-" や英数字のみなど）が決まっている場合はここで厳密にチェックします。
-      // ※プロジェクトの要件に合わせて正規表現を変更可能です（例: 半角英数字4〜20文字など）
-      const memberCodePattern = /^[A-Za-z0-9_-]{4,30}$/; 
-      return memberCodePattern.test(qrStr);
+      // 空白ではない、かつ一般的な長さ（1文字以上）であれば通すように設定
+      // 特定のプレフィックスがある場合はここに条件を追加してください (例: qrStr.startsWith('M-'))
+      return qrStr.trim().length > 0;
     }
 
     // JANコードのチェックデジット検証 (モジュラス10)
@@ -357,7 +356,7 @@
 
       const trimmedData = scannedData.trim();
 
-      // --- 会員モードの場合、不正な形式のQRコードを即座に弾くバリデーション ---
+      // --- 会員モードの場合のQR形式チェック ---
       if (currentMode === 'member') {
         if (!isValidMemberQR(trimmedData)) {
           candidateCount = 0;
@@ -410,7 +409,7 @@
         playBeepSound('success');
         resultText.innerText = `読み取りコード: ${trimmedData} (${isEntering ? '入場' : '退場'})`;
         
-        // サーバーへ送信（actionプロパティを追加しつつ、既存のcodeプロパティも維持）
+        // サーバーへ送信
         socket.emit('scan-qr', { 
           code: trimmedData,
           action: actionType
