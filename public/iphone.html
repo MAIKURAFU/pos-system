@@ -169,6 +169,34 @@
     let currentMode = 'member'; // 'member' または 'restock'
     let autoResetTimer = null;
 
+    // --- 誤読防止用バッファ変数 ---
+    let lastCandidateCode = "";
+    let candidateCount = 0;
+    const REQUIRED_MATCH_COUNT = 2; // 確定に必要な連続一致回数（ブレ対策）
+
+    // JANコードのチェックデジット検証 (モジュラス10)
+    function isValidJanCheckDigit(janStr) {
+      if (!/^\d{8}$|^\d{13}$/.test(janStr)) return false;
+      const digits = janStr.split('').map(Number);
+      const checkDigit = digits.pop();
+      let sum = 0;
+
+      if (janStr.length === 13) {
+        // JAN-13: 奇数インデックス(偶数桁)×3 + 偶数インデックス(奇数桁)×1
+        for (let i = 0; i < digits.length; i++) {
+          sum += (i % 2 === 1) ? digits[i] * 3 : digits[i];
+        }
+      } else {
+        // JAN-8: 偶数インデックス(奇数桁)×3 + 奇数インデックス(偶数桁)×1
+        for (let i = 0; i < digits.length; i++) {
+          sum += (i % 2 === 0) ? digits[i] * 3 : digits[i];
+        }
+      }
+
+      const calculatedCheckDigit = (10 - (sum % 10)) % 10;
+      return calculatedCheckDigit === checkDigit;
+    }
+
     // Web Audio API によるスキャン音の再生（iOS対応）
     let audioCtx = null;
     function initAudio() {
@@ -309,13 +337,31 @@
 
       const trimmedData = scannedData.trim();
 
-      // JANコード検証: 8桁または13桁の半角数字以外は読み取り対象外として無視
-      const isJanCode = /^\d{8}$|^\d{13}$/.test(trimmedData);
-      if (!isJanCode) {
+      // 1. チェックデジットの計算検証（動いた時の読み間違いによる不正コードを排除）
+      if (!isValidJanCheckDigit(trimmedData)) {
+        candidateCount = 0;
+        lastCandidateCode = "";
         return;
       }
 
+      // 2. 複数フレームでの連続一致検証（ブレ対策）
+      if (trimmedData === lastCandidateCode) {
+        candidateCount++;
+      } else {
+        lastCandidateCode = trimmedData;
+        candidateCount = 1;
+      }
+
+      // 指定回数（2回）連続して同じコードが検出されるまで確定しない
+      if (candidateCount < REQUIRED_MATCH_COUNT) {
+        return;
+      }
+
+      // 確定処理
       isScanning = false;
+      candidateCount = 0;
+      lastCandidateCode = "";
+
       if (autoResetTimer) clearTimeout(autoResetTimer);
 
       statusTag.innerText = "処理中";
@@ -379,6 +425,8 @@
     // 待機状態に戻す
     function resetToWaitState() {
       if (autoResetTimer) clearTimeout(autoResetTimer);
+      candidateCount = 0;
+      lastCandidateCode = "";
       statusTag.innerText = "読み取り待機中";
       statusTag.className = "status-tag";
       resultText.innerText = currentMode === 'member' 
