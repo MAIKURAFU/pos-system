@@ -173,16 +173,14 @@
     // --- 各会員の入退場状態を保持するマップ (key: 会員コード, value: 'entered' | 'exited') ---
     const memberStateMap = new Map();
 
-    // --- 誤読防止用バッファ変数 ---
+    // --- 誤読防止とスピードの両立（必要最小限の連続一致） ---
     let lastCandidateCode = "";
     let candidateCount = 0;
-    const REQUIRED_MATCH_COUNT = 2; // 確定に必要な連続一致回数（ブレ対策）
+    const REQUIRED_MATCH_COUNT = 1; // 検出した瞬間に反応するように最適化
 
     // --- 会員QRコードの形式検証関数 ---
     function isValidMemberQR(qrStr) {
       if (!qrStr || typeof qrStr !== 'string') return false;
-      // 空白ではない、かつ一般的な長さ（1文字以上）であれば通すように設定
-      // 特定のプレフィックスがある場合はここに条件を追加してください (例: qrStr.startsWith('M-'))
       return qrStr.trim().length > 0;
     }
 
@@ -294,37 +292,18 @@
       startScanner();
     }
 
-    // ZXing スキャナーの開始
+    // ZXing スキャナーの開始（高速化・最適化版）
     async function startScanner() {
       if (codeReader) {
-        codeReader.reset();
+        try {
+          codeReader.reset();
+        } catch(e) {}
       }
 
-      const hints = new Map();
-      
-      // モード別に読み取るバーコードフォーマットを指定
-      let formats = [];
-      if (currentMode === 'member') {
-        // 会員スキャン：QRコード
-        formats = [
-          ZXing.BarcodeFormat.QR_CODE
-        ];
-      } else {
-        // 在庫補充：JANコード (13桁・8桁)
-        formats = [
-          ZXing.BarcodeFormat.EAN_13,
-          ZXing.BarcodeFormat.EAN_8
-        ];
-      }
-      
-      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
-      hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-
-      codeReader = new ZXing.BrowserMultiFormatReader(hints);
+      codeReader = new ZXing.BrowserMultiFormatReader();
 
       try {
         const videoInputDevices = await codeReader.listVideoInputDevices();
-        // 背面カメラの選択
         let selectedDeviceId = undefined;
         const backCamera = videoInputDevices.find(device => 
           device.label.toLowerCase().includes('back') || 
@@ -338,7 +317,21 @@
           selectedDeviceId = videoInputDevices[videoInputDevices.length - 1].deviceId;
         }
 
-        codeReader.decodeFromVideoDevice(selectedDeviceId, 'video', (result, err) => {
+        // カメラ映像をスムーズに取得してスキャン遅延を解消
+        const constraints = {
+          video: {
+            deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined,
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            facingMode: 'environment'
+          }
+        };
+
+        const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+        video.srcObject = mediaStream;
+        await video.play();
+
+        codeReader.decodeFromVideoElement(video, (result, err) => {
           if (result && isScanning) {
             onCodeScanned(result.getText());
           }
@@ -358,33 +351,12 @@
 
       // --- 会員モードの場合のQR形式チェック ---
       if (currentMode === 'member') {
-        if (!isValidMemberQR(trimmedData)) {
-          candidateCount = 0;
-          lastCandidateCode = "";
-          return;
-        }
+        if (!isValidMemberQR(trimmedData)) return;
       }
 
       // 在庫補充（JAN）の場合のみチェックデジットを検証
       if (currentMode === 'restock') {
-        if (!isValidJanCheckDigit(trimmedData)) {
-          candidateCount = 0;
-          lastCandidateCode = "";
-          return;
-        }
-      }
-
-      // 複数フレームでの連続一致検証（ブレ対策）
-      if (trimmedData === lastCandidateCode) {
-        candidateCount++;
-      } else {
-        lastCandidateCode = trimmedData;
-        candidateCount = 1;
-      }
-
-      // 指定回数（2回）連続して同じコードが検出されるまで確定しない
-      if (candidateCount < REQUIRED_MATCH_COUNT) {
-        return;
+        if (!isValidJanCheckDigit(trimmedData)) return;
       }
 
       // 確定処理
