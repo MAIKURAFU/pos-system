@@ -12,7 +12,7 @@ const PORT = process.env.PORT || 3000;
 // 静的ファイルの提供
 app.use(express.static(path.join(__dirname, 'public')));
 
-// ヘルスチェック用エンドポイント（UptimeRobot等の監視用）
+// ヘルスチェック用エンドポイント
 app.get('/ping', (req, res) => {
   res.status(200).send('pong');
 });
@@ -23,20 +23,15 @@ let isLocked = true;
 // 従業員キーリスト（ロック解除用）
 const EMPLOYEE_KEYS = ['従0001', '従0002', '従0003'];
 
-// 会員データ（初期データ: nameを削除）
+// 会員データ（初期チップはすべて0）
 let members = [
-  { id: '1001', chips: 150, history: [] },
-  { id: '1002', chips: 300, history: [] },
-  { id: '1003', chips: 50, history: [] }
+  { id: '1001', chips: 0, history: [] },
+  { id: '1002', chips: 0, history: [] },
+  { id: '1003', chips: 0, history: [] }
 ];
 
-// 景品（商品）データ
-let products = [
-  { id: 'p1', name: 'ポテトチップス', category: 'お菓子', price: 10, currentStock: 20, initialStock: 20, reductionRate: 0 },
-  { id: 'p2', name: '缶コーラ', category: 'ドリンク', price: 15, currentStock: 15, initialStock: 15, reductionRate: 0 },
-  { id: 'p3', name: 'ミニカー', category: 'おもちゃ', price: 50, currentStock: 5, initialStock: 5, reductionRate: 0 },
-  { id: 'p4', name: 'ぬいぐるみ', category: 'イベント景品', price: 100, currentStock: 2, initialStock: 2, reductionRate: 0 }
-];
+// 景品（商品）データ（初期データは空）
+let products = [];
 
 // 現在選択中の会員ID
 let currentMemberId = null;
@@ -46,10 +41,9 @@ function isNumeric(val) {
   return /^\d+$/.test(val);
 }
 
-// 会員取得または自動生成を行う関数（数字のみなら全承認、名前なし）
+// 会員取得または自動生成を行う関数
 function getOrCreateMember(code) {
   let member = members.find(m => m.id === code);
-  // 数字のみのコードで未登録の場合は動的に新規会員を生成
   if (!member && isNumeric(code)) {
     member = {
       id: code,
@@ -111,7 +105,7 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // 数字のみのQRコードであれば全て会員として処理（マスターに無ければ自動生成）
+    // 数字のみのQRコードであれば全て会員として処理
     const member = getOrCreateMember(code);
     if (member) {
       currentMemberId = member.id;
@@ -124,7 +118,7 @@ io.on('connection', (socket) => {
   // 【手動操作】システムロックボタンが押されたとき
   socket.on('lock-system', () => {
     isLocked = true;
-    currentMemberId = null; // 選択中の会員をリセット
+    currentMemberId = null;
     io.emit('system-lock-status', {
       isLocked: true,
       message: 'システムがロックされました'
@@ -132,7 +126,7 @@ io.on('connection', (socket) => {
     io.emit('data-updated', { member: null, products });
   });
 
-  // 【member_check.html 専用】残高照会（数字のみなら全て可、他端末へは非通知）
+  // 残高照会
   socket.on('check-member-balance', (data) => {
     if (!data || !data.code) return;
     const code = data.code.trim();
@@ -183,11 +177,12 @@ io.on('connection', (socket) => {
       const prod = products.find(p => p.id === item.id);
       if (prod) {
         prod.currentStock -= item.quantity;
-        prod.reductionRate = Math.round(((prod.initialStock - prod.currentStock) / prod.initialStock) * 100);
+        prod.reductionRate = prod.initialStock > 0 
+          ? Math.round(((prod.initialStock - prod.currentStock) / prod.initialStock) * 100)
+          : 0;
       }
     });
 
-    // 日本標準時（JST）で時刻を記録
     const timeStr = getJSTTimeString();
 
     member.history.unshift({
@@ -203,28 +198,55 @@ io.on('connection', (socket) => {
     io.emit('data-updated', { member: null, products });
   });
 
-  // 在庫補充
+  // 在庫補充（未登録のJANコード読み取り時に新規登録）
   socket.on('restock-item', (data) => {
-    const prod = products.find(p => p.id === data.productId);
+    if (!data || !data.productId) return;
+    const code = data.productId.trim();
+    const amount = parseInt(data.amount, 10) || 1;
+
+    let prod = products.find(p => p.id === code);
+
     if (prod) {
-      prod.currentStock += data.amount;
+      // 既存商品の場合：在庫を加算
+      prod.currentStock += amount;
       if (prod.currentStock > prod.initialStock) {
         prod.initialStock = prod.currentStock;
       }
-      prod.reductionRate = Math.round(((prod.initialStock - prod.currentStock) / prod.initialStock) * 100);
-      io.emit('data-updated', { member: members.find(m => m.id === currentMemberId) || null, products });
+      prod.reductionRate = prod.initialStock > 0 
+        ? Math.round(((prod.initialStock - prod.currentStock) / prod.initialStock) * 100) 
+        : 0;
+    } else {
+      // 新規JANコードの場合：商品一覧へ新しく追加
+      prod = {
+        id: code,
+        name: `新商品 (${code})`,
+        category: '未分類',
+        price: 0,
+        currentStock: amount,
+        initialStock: amount,
+        reductionRate: 0
+      };
+      products.push(prod);
     }
+
+    // 接続されている全端末（iPad / iPhone）へデータをリアルタイム同期
+    io.emit('data-updated', { 
+      member: members.find(m => m.id === currentMemberId) || null, 
+      products 
+    });
   });
 
-  // 商品情報更新
+  // 商品情報更新（iPad側の編集機能用）
   socket.on('update-product', (data) => {
     const prod = products.find(p => p.id === data.productId);
     if (prod) {
       prod.name = data.name;
-      prod.price = data.price;
-      prod.currentStock = data.currentStock;
+      prod.price = parseInt(data.price, 10) || 0;
+      prod.currentStock = parseInt(data.currentStock, 10) || 0;
       if (prod.currentStock > prod.initialStock) prod.initialStock = prod.currentStock;
-      prod.reductionRate = Math.round(((prod.initialStock - prod.currentStock) / prod.initialStock) * 100);
+      prod.reductionRate = prod.initialStock > 0 
+        ? Math.round(((prod.initialStock - prod.currentStock) / prod.initialStock) * 100) 
+        : 0;
       io.emit('data-updated', { member: members.find(m => m.id === currentMemberId) || null, products });
     }
   });

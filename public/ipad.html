@@ -229,6 +229,7 @@
       if (data && data.member) {
         currentMember = data.member; 
         renderMember(); 
+        renderProducts();
       }
     });
 
@@ -284,7 +285,7 @@
     function filterCategory(cat) {
       selectedCategory = cat;
       document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.innerText === cat);
+        btn.classList.toggle('active', btn.innerText.trim() === cat);
       });
       renderProducts();
     }
@@ -351,15 +352,16 @@
       if (selectedCategory !== 'すべて') {
         filtered = filtered.filter(p => p.category === selectedCategory);
       }
-      const sorted = [...filtered].sort((a, b) => b.reductionRate - a.reductionRate);
+      const sorted = [...filtered].sort((a, b) => (b.reductionRate || 0) - (a.reductionRate || 0));
       
       sorted.forEach(p => {
         const inCartQty = cart[p.id] || 0;
         const card = document.createElement('div');
         card.className = `product-card ${inCartQty > 0 ? 'active' : ''} ${p.currentStock <= 0 ? 'out-of-stock' : ''}`;
+        const reduction = p.reductionRate !== undefined ? p.reductionRate : 0;
         
         card.innerHTML = `
-          <div class="rate-badge">減少率 ${p.reductionRate}%</div>
+          <div class="rate-badge">減少率 ${reduction}%</div>
           <div onclick="addCart('${p.id}')" style="cursor:pointer; flex:1;">
             <span class="category-tag">${p.category}</span>
             <div style="font-weight:bold; font-size:18px;">${p.name}</div>
@@ -439,19 +441,34 @@
         });
       }
 
+      const displayChips = currentMember ? (currentMember.chips !== undefined ? currentMember.chips : 0) : 0;
+      const checkoutBtn = document.getElementById('checkoutBtn');
+
       document.getElementById('totalCost').innerText = total;
-      document.getElementById('checkoutBtn').disabled = !currentMember || total === 0;
+      checkoutBtn.disabled = !currentMember || total === 0 || total > displayChips;
     }
 
     function chargeChips(amount) {
       if (!currentMember) return alert('会員QRコードを読み取ってください');
-      const memberId = currentMember.id || currentMember.memberId;
+      const memberId = currentMember.id || currentMember.memberId || currentMember.code;
       socket.emit('charge-chips', { memberId, amount });
     }
 
     function submitPurchase() {
       if (!currentMember) return;
-      const memberId = currentMember.id || currentMember.memberId;
+      const displayChips = currentMember.chips !== undefined ? currentMember.chips : 0;
+      
+      let total = 0;
+      Object.keys(cart).forEach(id => {
+        const p = productsList.find(item => item.id === id);
+        if (p) total += p.price * cart[id];
+      });
+
+      if (total > displayChips) {
+        return alert('所持チップが不足しています');
+      }
+
+      const memberId = currentMember.id || currentMember.memberId || currentMember.code;
       const cartItems = Object.keys(cart).map(id => ({ id, quantity: cart[id] }));
       socket.emit('purchase-items', { memberId, cartItems });
     }

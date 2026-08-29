@@ -172,17 +172,23 @@
     // Web Audio API によるスキャン音の再生（iOS対応）
     let audioCtx = null;
     function initAudio() {
-      if (!audioCtx) {
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      }
-      if (audioCtx.state === 'suspended') {
-        audioCtx.resume();
+      try {
+        if (!audioCtx) {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === 'suspended') {
+          audioCtx.resume();
+        }
+      } catch (e) {
+        console.error("Audio init error", e);
       }
     }
 
     function playBeepSound(type = 'success') {
       try {
         initAudio();
+        if (!audioCtx) return;
+
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
         
@@ -205,6 +211,7 @@
           osc.stop(audioCtx.currentTime + 0.08);
 
           setTimeout(() => {
+            if (!audioCtx) return;
             const osc2 = audioCtx.createOscillator();
             const gain2 = audioCtx.createGain();
             osc2.type = 'sine';
@@ -217,7 +224,7 @@
           }, 90);
         }
       } catch (e) {
-        console.error("Audio error", e);
+        console.error("Audio play error", e);
       }
 
       if ("vibrate" in navigator) {
@@ -316,13 +323,25 @@
       if (currentMode === 'member') {
         playBeepSound('success');
         resultText.innerText = `コード読み取り: ${trimmedData}`;
-        socket.emit('scan-qr', { code: trimmedData });
+        
+        // サーバー側の受取形式（code / memberId / id）の不整合を防ぐため多重送信設定
+        socket.emit('scan-qr', { 
+          code: trimmedData,
+          memberId: trimmedData,
+          id: trimmedData
+        });
       } else if (currentMode === 'restock') {
         playBeepSound('restock');
         const amountInput = document.getElementById('restockAmount');
         const amount = parseInt(amountInput.value, 10) || 1;
         
-        socket.emit('restock-item', { productId: trimmedData, amount: amount });
+        // productId / janCode どちらの判定にも耐えうるようにキーを送信
+        socket.emit('restock-item', { 
+          productId: trimmedData, 
+          janCode: trimmedData,
+          code: trimmedData,
+          amount: amount 
+        });
         
         statusTag.innerText = "補充完了";
         statusTag.className = "status-tag success";
@@ -341,14 +360,19 @@
     socket.on('error-message', (data) => {
       statusTag.innerText = "エラー";
       statusTag.className = "status-tag error";
-      resultText.innerText = data.message || "エラーが発生しました";
+      resultText.innerText = (data && data.message) ? data.message : "エラーが発生しました";
     });
 
     // 会員読み取り完了の通知
     socket.on('member-scanned', (data) => {
       statusTag.innerText = "連携完了";
       statusTag.className = "status-tag success";
-      resultText.innerText = `ID: ${data.member.id} を連携しました`;
+
+      // 会員データの構造（data.member.id または data.memberId 等）に柔軟に対応
+      const memberObj = data ? (data.member || data) : {};
+      const memberId = memberObj.id || memberObj.memberId || memberObj.code || '不明';
+
+      resultText.innerText = `ID: ${memberId} を連携しました`;
 
       // 会員スキャン時も1.8秒後に自動復帰
       autoResetTimer = setTimeout(() => {

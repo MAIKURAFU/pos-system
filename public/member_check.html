@@ -200,8 +200,9 @@
       statusTag.innerText = "照会完了";
       statusTag.classList.add('active');
 
+      // member.name を除去し、IDのみ表示に調整
       resultContent.innerHTML = `
-        <div class="member-name">${member.name} 様 <span style="font-size:12px; color:#94a3b8; font-weight:normal;">(ID: ${member.id})</span></div>
+        <div class="member-name">会員ID: ${member.id}</div>
         <div class="chip-container">
           <div class="chip-label">現在の所持コイン（チップ）</div>
           <div class="chip-count">${member.chips} <span style="font-size:18px;">枚</span></div>
