@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>iPhoneスキャナー</title>
   <script src="/socket.io/socket.io.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/jsqr/dist/jsQR.js"></script>
+  <!-- JANコード・1Dバーコード・QRコード対応ライブラリ ZXing -->
+  <script src="https://unpkg.com/@zxing/library@latest"></script>
   <style>
     * { box-sizing: border-box; font-family: -apple-system, sans-serif; }
     body { margin: 0; padding: 0; background: #0f172a; color: #fff; text-align: center; overflow: hidden; }
@@ -49,6 +50,7 @@
     }
     video { width: 100%; height: 100%; object-fit: cover; }
     
+    /* スキャンガイド（モードに応じて縦横比変更） */
     .scan-guide {
       position: absolute;
       top: 50%; left: 50%;
@@ -58,6 +60,12 @@
       border-radius: 12px;
       box-shadow: 0 0 0 4000px rgba(0, 0, 0, 0.5);
       pointer-events: none;
+      transition: all 0.3s ease;
+    }
+    /* 在庫補充時の横長ガイド */
+    .scan-guide.barcode-mode {
+      width: 260px;
+      height: 120px;
     }
 
     .restock-controls {
@@ -102,7 +110,7 @@
     .status-tag.success { background: #10b981; color: #fff; }
     .status-tag.error { background: #ef4444; color: #fff; }
 
-    .result-text { font-size: 15px; font-weight: bold; margin: 6px 0; }
+    .result-text { font-size: 15px; font-weight: bold; margin: 6px 0; word-break: break-all; }
     
     .reset-btn {
       margin-top: 6px;
@@ -125,14 +133,13 @@
       <!-- タブ切り替えボタン -->
       <div class="tab-container">
         <button id="tabMember" class="tab-btn active" onclick="switchMode('member')">会員スキャン</button>
-        <button id="tabRestock" class="tab-btn" onclick="switchMode('restock')">在庫補充</button>
+        <button id="tabRestock" class="tab-btn" onclick="switchMode('restock')">在庫補充 (JAN)</button>
       </div>
     </header>
 
     <div class="scanner-container">
       <video id="video" playsinline></video>
-      <canvas id="canvas" hidden></canvas>
-      <div class="scan-guide"></div>
+      <div id="scanGuide" class="scan-guide"></div>
     </div>
 
     <!-- 在庫補充用：一度に補充する個数の設定 -->
@@ -151,122 +158,180 @@
   <script>
     const socket = io();
     const video = document.getElementById('video');
-    const canvas = document.getElementById('canvas');
-    const ctx = canvas.getContext('2d');
     const statusTag = document.getElementById('statusTag');
     const resultText = document.getElementById('resultText');
     const nextScanBtn = document.getElementById('nextScanBtn');
     const restockInputArea = document.getElementById('restockInputArea');
+    const scanGuide = document.getElementById('scanGuide');
 
+    let codeReader = null;
     let isScanning = true;
     let currentMode = 'member'; // 'member' または 'restock'
+    let autoResetTimer = null;
 
     // Web Audio API によるスキャン音の再生（iOS対応）
     let audioCtx = null;
-    function playBeepSound() {
-      try {
-        if (!audioCtx) {
-          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        }
-        if (audioCtx.state === 'suspended') {
-          audioCtx.resume();
-        }
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(2000, audioCtx.currentTime); // 2000Hzの高音ビープ
-        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.1); // 0.1秒間再生
-      } catch (e) {
-        console.error("Audio play error", e);
+    function initAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       }
-
-      // バイブレーション（Android等対応用）
-      if ("vibrate" in navigator) {
-        navigator.vibrate([100, 50, 100]);
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
       }
     }
 
+    function playBeepSound(type = 'success') {
+      try {
+        initAudio();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        
+        osc.type = 'sine';
+        
+        if (type === 'success') {
+          osc.frequency.setValueAtTime(1800, audioCtx.currentTime);
+          gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.1);
+        } else {
+          // 補充時のピピッという2音
+          osc.frequency.setValueAtTime(1200, audioCtx.currentTime);
+          gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.08);
+
+          setTimeout(() => {
+            const osc2 = audioCtx.createOscillator();
+            const gain2 = audioCtx.createGain();
+            osc2.type = 'sine';
+            osc2.frequency.setValueAtTime(1800, audioCtx.currentTime);
+            gain2.gain.setValueAtTime(0.15, audioCtx.currentTime);
+            osc2.connect(gain2);
+            gain2.connect(audioCtx.destination);
+            osc2.start();
+            osc2.stop(audioCtx.currentTime + 0.1);
+          }, 90);
+        }
+      } catch (e) {
+        console.error("Audio error", e);
+      }
+
+      if ("vibrate" in navigator) {
+        navigator.vibrate(100);
+      }
+    }
+
+    // 初回タッチ時にオーディオを初期化（iOS制限対策）
+    document.addEventListener('touchstart', initAudio, { once: true });
+    document.addEventListener('click', initAudio, { once: true });
+
     // モード切り替え処理
     function switchMode(mode) {
+      if (currentMode === mode && codeReader) return;
       currentMode = mode;
+      
       document.getElementById('tabMember').classList.toggle('active', mode === 'member');
       document.getElementById('tabRestock').classList.toggle('active', mode === 'restock');
       
       restockInputArea.style.display = (mode === 'restock') ? 'flex' : 'none';
+      
+      if (mode === 'restock') {
+        scanGuide.classList.add('barcode-mode');
+      } else {
+        scanGuide.classList.remove('barcode-mode');
+      }
+
       resetToWaitState();
+      startScanner();
     }
 
-    // カメラ起動
-    async function startCamera() {
+    // ZXing スキャナーの開始
+    async function startScanner() {
+      if (codeReader) {
+        codeReader.reset();
+      }
+
+      const hints = new Map();
+      const formats = [];
+
+      if (currentMode === 'member') {
+        // 会員モード: QRコード優先
+        formats.push(ZXing.BarcodeFormat.QR_CODE);
+      } else {
+        // 在庫補充モード: JANコード / 1Dバーコード全般 + QR
+        formats.push(
+          ZXing.BarcodeFormat.EAN_13,
+          ZXing.BarcodeFormat.EAN_8,
+          ZXing.BarcodeFormat.CODE_128,
+          ZXing.BarcodeFormat.UPC_A,
+          ZXing.BarcodeFormat.UPC_E,
+          ZXing.BarcodeFormat.CODE_39,
+          ZXing.BarcodeFormat.QR_CODE
+        );
+      }
+      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
+      hints.set(ZXing.DecodeHintType.TRY_HARDER, true); // 解像度が低いバーコードの検出精度をアップ
+
+      codeReader = new ZXing.BrowserMultiFormatReader(hints);
+
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { exact: "environment" } }
-        });
-        video.srcObject = stream;
-        video.setAttribute('playsinline', true);
-        video.play();
-        requestAnimationFrame(tick);
-      } catch (err) {
-        try {
-          const fallbackStream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: "environment" }
-          });
-          video.srcObject = fallbackStream;
-          video.setAttribute('playsinline', true);
-          video.play();
-          requestAnimationFrame(tick);
-        } catch (e) {
-          resultText.innerText = "カメラの起動に失敗しました";
-        }
-      }
-    }
-
-    function tick() {
-      if (video.readyState === video.HAVE_ENOUGH_DATA && isScanning) {
-        canvas.height = video.videoHeight;
-        canvas.width = video.videoWidth;
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const videoInputDevices = await codeReader.listVideoInputDevices();
+        // 背面カメラの選択
+        let selectedDeviceId = undefined;
+        const backCamera = videoInputDevices.find(device => 
+          device.label.toLowerCase().includes('back') || 
+          device.label.toLowerCase().includes('背面') ||
+          device.label.toLowerCase().includes('environment')
+        );
         
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const code = jsQR(imageData.data, imageData.width, imageData.height, {
-          inversionAttempts: "dontInvert",
-        });
-
-        if (code && code.data) {
-          onCodeScanned(code.data);
+        if (backCamera) {
+          selectedDeviceId = backCamera.deviceId;
+        } else if (videoInputDevices.length > 0) {
+          selectedDeviceId = videoInputDevices[videoInputDevices.length - 1].deviceId;
         }
+
+        codeReader.decodeFromVideoDevice(selectedDeviceId, 'video', (result, err) => {
+          if (result && isScanning) {
+            onCodeScanned(result.getText());
+          }
+        });
+      } catch (err) {
+        console.error("Camera start error:", err);
+        resultText.innerText = "カメラの起動に失敗しました";
       }
-      requestAnimationFrame(tick);
     }
 
     function onCodeScanned(scannedData) {
       isScanning = false;
-      playBeepSound(); // スキャン成功音を鳴らす
+      if (autoResetTimer) clearTimeout(autoResetTimer);
 
       const trimmedData = scannedData.trim();
       statusTag.innerText = "処理中";
       statusTag.className = "status-tag active";
 
       if (currentMode === 'member') {
-        // 会員スキャン処理
+        playBeepSound('success');
         resultText.innerText = `コード読み取り: ${trimmedData}`;
         socket.emit('scan-qr', { code: trimmedData });
       } else if (currentMode === 'restock') {
-        // 在庫補充処理
+        playBeepSound('restock');
         const amountInput = document.getElementById('restockAmount');
         const amount = parseInt(amountInput.value, 10) || 1;
         
-        resultText.innerText = `商品ID: ${trimmedData} を +${amount}個 補充中`;
         socket.emit('restock-item', { productId: trimmedData, amount: amount });
         
-        // 補充成功の画面表示
         statusTag.innerText = "補充完了";
         statusTag.className = "status-tag success";
-        resultText.innerText = `商品 [${trimmedData}] を ${amount}個 補充しました`;
+        resultText.innerText = `JAN/ID [${trimmedData}] を ${amount}個 補充しました`;
+
+        // 在庫補充時は1.8秒後に自動で次の読み取りへ復帰
+        autoResetTimer = setTimeout(() => {
+          resetToWaitState();
+        }, 1800);
       }
 
       nextScanBtn.style.display = "inline-block";
@@ -284,20 +349,28 @@
       statusTag.innerText = "連携完了";
       statusTag.className = "status-tag success";
       resultText.innerText = `ID: ${data.member.id} を連携しました`;
+
+      // 会員スキャン時も1.8秒後に自動復帰
+      autoResetTimer = setTimeout(() => {
+        resetToWaitState();
+      }, 1800);
     });
 
     // 待機状態に戻す
     function resetToWaitState() {
+      if (autoResetTimer) clearTimeout(autoResetTimer);
       statusTag.innerText = "読み取り待機中";
       statusTag.className = "status-tag";
       resultText.innerText = currentMode === 'member' 
         ? "カメラに会員QRコードをかざしてください" 
-        : "カメラに商品コード(p1, p2等)をかざしてください";
+        : "カメラにJANバーコードをかざしてください";
       nextScanBtn.style.display = "none";
       isScanning = true;
     }
 
-    window.addEventListener('load', startCamera);
+    window.addEventListener('load', () => {
+      switchMode('member');
+    });
   </script>
 </body>
 </html>
