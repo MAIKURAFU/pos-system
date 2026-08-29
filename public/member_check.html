@@ -3,54 +3,32 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>読取機</title>
+  <title>入場記録</title>
   <script src="/socket.io/socket.io.js"></script>
-  <!-- 高速・確実なQR読み取りライブラリ jsQR -->
   <script src="https://cdn.jsdelivr.net/npm/jsqr/dist/jsQR.js"></script>
   <style>
     * { box-sizing: border-box; font-family: -apple-system, sans-serif; }
-    body { margin: 0; padding: 0; background: #0f172a; color: #fff; text-align: center; overflow: hidden; }
+    body { margin: 0; padding: 0; background: #000; color: #fff; text-align: center; overflow: hidden; }
     
-    .container { display: flex; flex-direction: column; height: 100vh; justify-content: space-between; padding: 15px; }
-    
-    /* タブ切り替えUI */
-    .tab-container {
-      display: flex;
-      background: #1e293b;
-      border-radius: 12px;
-      padding: 4px;
-      margin-bottom: 10px;
-    }
-    .tab-btn {
-      flex: 1;
-      padding: 10px;
-      border: none;
-      background: transparent;
-      color: #94a3b8;
-      font-size: 14px;
-      font-weight: bold;
-      border-radius: 8px;
-      cursor: pointer;
-    }
-    .tab-btn.active {
-      background: #38bdf8;
-      color: #0f172a;
-    }
+    .container { display: flex; flex-direction: column; height: 100vh; justify-content: space-between; padding: 20px 15px; }
+    header h1 { font-size: 20px; margin: 0; color: #38bdf8; }
+    header p { font-size: 13px; color: #aaa; margin-top: 5px; }
 
+    /* カメラ映像・スキャンエリア */
     .scanner-container {
       position: relative;
       width: 100%;
       max-width: 360px;
-      height: 280px;
+      height: 320px;
       margin: 0 auto;
       border-radius: 16px;
       overflow: hidden;
-      background: #000;
-      border: 2px solid #334155;
+      background: #111;
+      border: 2px solid #333;
     }
     video { width: 100%; height: 100%; object-fit: cover; }
     
-    /* スキャンガイド（モードに応じて縦横比変更） */
+    /* 読み取りフレームガイド */
     .scan-guide {
       position: absolute;
       top: 50%; left: 50%;
@@ -60,39 +38,15 @@
       border-radius: 12px;
       box-shadow: 0 0 0 4000px rgba(0, 0, 0, 0.5);
       pointer-events: none;
-      transition: all 0.3s ease;
-    }
-    /* 在庫補充時の横長ガイド */
-    .scan-guide.barcode-mode {
-      width: 260px;
-      height: 120px;
     }
 
-    .restock-controls {
-      margin-top: 10px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
-    }
-    .restock-controls label { font-size: 14px; color: #94a3b8; }
-    .restock-controls input {
-      width: 80px;
-      padding: 8px;
-      border-radius: 6px;
-      border: 1px solid #334155;
-      background: #0f172a;
-      color: #fff;
-      font-size: 16px;
-      text-align: center;
-    }
-
+    /* 結果通知エリア */
     .result-card {
       background: #1e293b;
       border-radius: 12px;
       padding: 15px;
       margin-top: 10px;
-      min-height: 110px;
+      min-height: 120px;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -104,56 +58,49 @@
       border-radius: 12px;
       background: #334155;
       color: #94a3b8;
-      margin-bottom: 6px;
+      margin-bottom: 8px;
     }
     .status-tag.active { background: #0284c7; color: #fff; }
-    .status-tag.success { background: #10b981; color: #fff; }
-    .status-tag.checkout { background: #f59e0b; color: #fff; }
-    .status-tag.error { background: #ef4444; color: #fff; }
 
-    .result-text { font-size: 15px; font-weight: bold; margin: 6px 0; word-break: break-all; }
+    .member-name { font-size: 18px; font-weight: bold; color: #fff; margin-bottom: 4px; }
+    .chip-container { margin: 6px 0; }
+    .chip-label { font-size: 12px; color: #94a3b8; }
+    .chip-count { font-size: 36px; font-weight: bold; color: #38bdf8; line-height: 1.2; }
     
+    /* リセット用ボタン */
     .reset-btn {
-      margin-top: 6px;
-      background: #0284c7;
+      margin-top: 10px;
+      background: #475569;
       color: #fff;
       border: none;
-      border-radius: 8px;
-      padding: 8px 18px;
-      font-size: 14px;
+      border-radius: 6px;
+      padding: 8px 16px;
+      font-size: 13px;
       font-weight: bold;
       cursor: pointer;
     }
-    .reset-btn:active { background: #0369a1; }
   </style>
 </head>
 <body>
 
   <div class="container">
     <header>
-      <!-- タブ切り替えボタン -->
-      <div class="tab-container">
-        <button id="tabMember" class="tab-btn active" onclick="switchMode('member')">会員スキャン (QR)</button>
-        <button id="tabRestock" class="tab-btn" onclick="switchMode('restock')">在庫補充 (JAN)</button>
-      </div>
+      <h1>入場スキャナー</h1>
+      <p>QRコードをカメラにかざしてください</p>
     </header>
 
     <div class="scanner-container">
       <video id="video" playsinline></video>
       <canvas id="canvas" hidden></canvas>
-      <div id="scanGuide" class="scan-guide"></div>
-    </div>
-
-    <!-- 在庫補充用：一度に補充する個数の設定 -->
-    <div id="restockInputArea" class="restock-controls" style="display: none;">
-      <label for="restockAmount">補充数量:</label>
-      <input type="number" id="restockAmount" value="1" min="1" max="999">
+      <div class="scan-guide"></div>
     </div>
 
     <div class="result-card">
       <div id="statusTag" class="status-tag">読み取り待機中</div>
-      <div id="resultText" class="result-text">カメラにコードをかざしてください</div>
-      <button id="nextScanBtn" class="reset-btn" style="display:none;" onclick="resetToWaitState()">次のコードを読み取る</button>
+      <div id="resultContent">
+        <div style="font-size: 15px; color: #94a3b8; margin: 10px 0;">QRコードを読み取ると所持コインが表示されます</div>
+      </div>
+      <button id="resetBtn" class="reset-btn" style="display:none;" onclick="resetToWaitState()">別のQRコードを読み取る</button>
     </div>
   </div>
 
@@ -163,133 +110,13 @@
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
     const statusTag = document.getElementById('statusTag');
-    const resultText = document.getElementById('resultText');
-    const nextScanBtn = document.getElementById('nextScanBtn');
-    const restockInputArea = document.getElementById('restockInputArea');
-    const scanGuide = document.getElementById('scanGuide');
+    const resultContent = document.getElementById('resultContent');
+    const resetBtn = document.getElementById('resetBtn');
 
     let isScanning = true;
-    let currentMode = 'member'; // 'member' または 'restock'
     let lastScannedCode = null;
-    let autoResetTimer = null;
 
-    // --- 各会員の入退場状態を保持するマップ (key: 会員コード, value: 'entered' | 'exited') ---
-    const memberStateMap = new Map();
-
-    // --- 会員QRコードの形式検証関数 ---
-    function isValidMemberQR(qrStr) {
-      if (!qrStr || typeof qrStr !== 'string') return false;
-      return qrStr.trim().length > 0;
-    }
-
-    // JANコードのチェックデジット検証 (モジュラス10)
-    function isValidJanCheckDigit(janStr) {
-      if (!/^\d{8}$|^\d{13}$/.test(janStr)) return false;
-      const digits = janStr.split('').map(Number);
-      const checkDigit = digits.pop();
-      let sum = 0;
-
-      if (janStr.length === 13) {
-        for (let i = 0; i < digits.length; i++) {
-          sum += (i % 2 === 1) ? digits[i] * 3 : digits[i];
-        }
-      } else {
-        for (let i = 0; i < digits.length; i++) {
-          sum += (i % 2 === 0) ? digits[i] * 3 : digits[i];
-        }
-      }
-
-      const calculatedCheckDigit = (10 - (sum % 10)) % 10;
-      return calculatedCheckDigit === checkDigit;
-    }
-
-    // Web Audio API によるスキャン音の再生（iOS対応）
-    let audioCtx = null;
-    function initAudio() {
-      try {
-        if (!audioCtx) {
-          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        }
-        if (audioCtx.state === 'suspended') {
-          audioCtx.resume();
-        }
-      } catch (e) {
-        console.error("Audio init error", e);
-      }
-    }
-
-    function playBeepSound(type = 'success') {
-      try {
-        initAudio();
-        if (!audioCtx) return;
-
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        
-        osc.type = 'sine';
-        
-        if (type === 'success') {
-          osc.frequency.setValueAtTime(1800, audioCtx.currentTime);
-          gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
-          osc.connect(gain);
-          gain.connect(audioCtx.destination);
-          osc.start();
-          osc.stop(audioCtx.currentTime + 0.1);
-        } else {
-          // 補充時のピピッという2音
-          osc.frequency.setValueAtTime(1200, audioCtx.currentTime);
-          gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
-          osc.connect(gain);
-          gain.connect(audioCtx.destination);
-          osc.start();
-          osc.stop(audioCtx.currentTime + 0.08);
-
-          setTimeout(() => {
-            if (!audioCtx) return;
-            const osc2 = audioCtx.createOscillator();
-            const gain2 = audioCtx.createGain();
-            osc2.type = 'sine';
-            osc2.frequency.setValueAtTime(1800, audioCtx.currentTime);
-            gain2.gain.setValueAtTime(0.15, audioCtx.currentTime);
-            osc2.connect(gain2);
-            gain2.connect(audioCtx.destination);
-            osc2.start();
-            osc2.stop(audioCtx.currentTime + 0.1);
-          }, 90);
-        }
-      } catch (e) {
-        console.error("Audio play error", e);
-      }
-
-      if ("vibrate" in navigator) {
-        navigator.vibrate(100);
-      }
-    }
-
-    // 初回タッチ時にオーディオを初期化（iOS制限対策）
-    document.addEventListener('touchstart', initAudio, { once: true });
-    document.addEventListener('click', initAudio, { once: true });
-
-    // モード切り替え処理
-    function switchMode(mode) {
-      if (currentMode === mode) return;
-      currentMode = mode;
-      
-      document.getElementById('tabMember').classList.toggle('active', mode === 'member');
-      document.getElementById('tabRestock').classList.toggle('active', mode === 'restock');
-      
-      restockInputArea.style.display = (mode === 'restock') ? 'flex' : 'none';
-      
-      if (mode === 'restock') {
-        scanGuide.classList.add('barcode-mode');
-      } else {
-        scanGuide.classList.remove('barcode-mode');
-      }
-
-      resetToWaitState();
-    }
-
-    // 確実な背面カメラの起動処理
+    // 背面カメラを起動
     async function startCamera() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -309,14 +136,11 @@
           video.play();
           requestAnimationFrame(tick);
         } catch (e) {
-          statusTag.innerText = "エラー";
-          statusTag.className = "status-tag error";
-          resultText.innerText = "カメラの起動に失敗しました";
+          resultContent.innerHTML = '<div style="color:#ef4444;">カメラの起動に失敗しました</div>';
         }
       }
     }
 
-    // フレーム毎のスキャン処理 (jsQRを使用)
     function tick() {
       if (video.readyState === video.HAVE_ENOUGH_DATA) {
         canvas.height = video.videoHeight;
@@ -337,119 +161,86 @@
       requestAnimationFrame(tick);
     }
 
+    function triggerVibration() {
+      if ("vibrate" in navigator) {
+        navigator.vibrate([100, 50, 100]);
+      }
+      if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.haptic) {
+        window.webkit.messageHandlers.haptic.postMessage("medium");
+      }
+    }
+
     function onCodeScanned(scannedData) {
-      const trimmedData = scannedData.trim();
-
-      // --- 会員モードの場合のQR形式チェック ---
-      if (currentMode === 'member') {
-        if (!isValidMemberQR(trimmedData)) return;
-      }
-
-      // 在庫補充（JAN）の場合のみチェックデジットを検証
-      if (currentMode === 'restock') {
-        if (!isValidJanCheckDigit(trimmedData)) return;
-      }
-
-      // 確定処理
       isScanning = false;
       lastScannedCode = scannedData;
 
-      if (autoResetTimer) clearTimeout(autoResetTimer);
+      const trimmedData = scannedData.trim();
+      statusTag.innerText = "照会中...";
+      statusTag.classList.add('active');
 
-      statusTag.innerText = "処理中";
-      statusTag.className = "status-tag active";
+      // 本iPhone画面用の残高照会・入場ログ記録処理のみを実行（iPadレジへ通知する scan-qr は発行しない）
+      socket.emit('check-member-balance', { code: trimmedData });
 
-      if (currentMode === 'member') {
-        // --- 入退場状態のトグル判定 (未入場/退場中なら入場、入場中なら退場) ---
-        const currentState = memberStateMap.get(trimmedData) || 'exited';
-        const isEntering = (currentState === 'exited');
-        const actionType = isEntering ? 'check-in' : 'check-out';
-        
-        // 状態を反転して保存
-        memberStateMap.set(trimmedData, isEntering ? 'entered' : 'exited');
-
-        playBeepSound('success');
-        resultText.innerText = `読み取りコード: ${trimmedData} (${isEntering ? '入場' : '退場'})`;
-        
-        // サーバーへ送信
-        socket.emit('scan-qr', { 
-          code: trimmedData,
-          action: actionType
-        });
-      } else if (currentMode === 'restock') {
-        playBeepSound('restock');
-        const amountInput = document.getElementById('restockAmount');
-        const amount = parseInt(amountInput.value, 10) || 1;
-        
-        socket.emit('restock-item', { 
-          productId: trimmedData, 
-          amount: amount 
-        });
-        
-        statusTag.innerText = "補充完了";
-        statusTag.className = "status-tag success";
-        resultText.innerText = `JAN [${trimmedData}] を ${amount}個 補充しました`;
-
-        autoResetTimer = setTimeout(() => {
-          resetToWaitState();
-        }, 1800);
-      }
-
-      nextScanBtn.style.display = "inline-block";
+      triggerVibration();
     }
 
-    // サーバーからのエラー応答
-    socket.on('error-message', (data) => {
-      statusTag.innerText = "エラー";
-      statusTag.className = "status-tag error";
-      resultText.innerText = (data && data.message) ? data.message : "エラーが発生しました";
+    // 残高照会の結果受信（送信元のみ受け取る）
+    socket.on('member-balance-result', (res) => {
+      if (res.success && res.member) {
+        showMemberInfo(res.member);
+      } else {
+        statusTag.innerText = "エラー";
+        statusTag.classList.remove('active');
+        resultContent.innerHTML = `<div style="color:#ef4444; font-weight:bold; margin: 10px 0;">${res.message || '登録情報が見つかりません'}</div>`;
+        resetBtn.style.display = 'inline-block';
+      }
     });
 
-    // 会員読み取り完了の通知
-    socket.on('member-scanned', (data) => {
-      statusTag.innerText = "読取完了";
-      statusTag.className = "status-tag success";
-
-      const memberObj = data ? (data.member || data) : {};
-      const memberId = memberObj.id || memberObj.memberId || memberObj.code || '不明';
-
-      resultText.innerText = `会員ID: ${memberId} を読み取りました`;
-
-      autoResetTimer = setTimeout(() => {
-        resetToWaitState();
-      }, 1800);
-    });
-
-    // システムロック状態の受信（従業員QR読み取り時の通知）
+    // システムロック状態変更のイベント通知（従業員キー読み取り時の通知）
     socket.on('system-lock-status', (data) => {
-      if (!data.isLocked && currentMode === 'member') {
+      if (!data.isLocked && !isScanning) {
         statusTag.innerText = "ロック解除";
-        statusTag.className = "status-tag success";
-        resultText.innerText = data.message || "システムロックを解除しました";
-
-        autoResetTimer = setTimeout(() => {
-          resetToWaitState();
-        }, 1800);
+        statusTag.classList.add('active');
+        resultContent.innerHTML = `<div style="color:#10b981; font-weight:bold; margin: 10px 0;">${data.message || 'システムロックを解除しました'}</div>`;
+        resetBtn.style.display = 'inline-block';
       }
     });
 
-    // 待機状態に戻す
-    function resetToWaitState() {
-      if (autoResetTimer) clearTimeout(autoResetTimer);
-      lastScannedCode = null;
-      statusTag.innerText = "読取待機中";
-      statusTag.className = "status-tag";
-      resultText.innerText = currentMode === 'member' 
-        ? "カメラにコードをかざしてください" 
-        : "カメラにコードをかざしてください";
-      nextScanBtn.style.display = "none";
-      isScanning = true;
+    // サーバーからのエラー通知
+    socket.on('error-message', (data) => {
+      if (!isScanning) {
+        statusTag.innerText = "エラー";
+        statusTag.classList.remove('active');
+        resultContent.innerHTML = `<div style="color:#ef4444; font-weight:bold; margin: 10px 0;">${data.message}</div>`;
+        resetBtn.style.display = 'inline-block';
+      }
+    });
+
+    function showMemberInfo(member) {
+      statusTag.innerText = "照会完了";
+      statusTag.classList.add('active');
+
+      resultContent.innerHTML = `
+        <div class="member-name">会員ID: ${member.id}</div>
+        <div class="chip-container">
+          <div class="chip-label">現在の所持チップ</div>
+          <div class="chip-count">${member.chips} <span style="font-size:18px;">枚</span></div>
+        </div>
+      `;
+
+      resetBtn.style.display = 'inline-block';
     }
 
-    window.addEventListener('load', () => {
-      switchMode('member');
-      startCamera();
-    });
+    function resetToWaitState() {
+      isScanning = true;
+      lastScannedCode = null;
+      statusTag.innerText = "読み取り待機中";
+      statusTag.classList.remove('active');
+      resultContent.innerHTML = '<div style="font-size: 15px; color: #94a3b8; margin: 10px 0;">QRコードを読み取ると所持チップが表示されます</div>';
+      resetBtn.style.display = 'none';
+    }
+
+    window.addEventListener('load', startCamera);
   </script>
 </body>
 </html>
