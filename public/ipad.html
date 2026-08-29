@@ -300,6 +300,30 @@
       renderProducts();
     }
 
+    function buildHistoryHTML(historyArray) {
+      if (!historyArray || historyArray.length === 0) {
+        return '<div style="color:#9ca3af; text-align:center; padding:10px;">購入履歴はありません</div>';
+      }
+      return historyArray.map(h => {
+        const staffText = h.staffId ? ` | 担当: ${h.staffId}` : '';
+        const itemName = h.items || h.item || h.name || '商品情報なし';
+        const rawCost = h.cost !== undefined ? h.cost : (h.amount || h.price || 0);
+        const itemTime = h.time || h.timestamp || '日時不明';
+
+        // 数値のプラス/マイナス表記調整
+        const costVal = Number(rawCost);
+        const displayCost = isNaN(costVal) ? rawCost : (costVal > 0 ? `-${costVal}` : `+${Math.abs(costVal)}`);
+
+        return `
+          <div class="history-item">
+            <div class="history-time">⏰ ${itemTime}${staffText}</div>
+            <div style="font-weight:bold; color:#111827;">${itemName}</div>
+            <div style="color:#ef4444; font-weight:bold; text-align:right; margin-top:2px;">${displayCost} チップ</div>
+          </div>
+        `;
+      }).join('');
+    }
+
     function renderMember() {
       const statusDiv = document.getElementById('memberStatus');
       const hList = document.getElementById('historyList');
@@ -335,27 +359,7 @@
         <div style="margin-top:5px; font-size:14px; color:#4b5563;">現在の所持チップ</div>
         <div class="chip-badge">${displayChips} 枚</div>`;
 
-      hList.innerHTML = '';
-      if (!currentMember.history || currentMember.history.length === 0) {
-        hList.innerHTML = '<div style="color:#9ca3af; text-align:center; padding:10px;">購入履歴はありません</div>';
-      } else {
-        currentMember.history.forEach(h => {
-          const itemDiv = document.createElement('div');
-          itemDiv.className = 'history-item';
-          const staffText = h.staffId ? ` | 担当: ${h.staffId}` : '';
-          
-          const itemName = h.items || h.item || h.name || '商品情報なし';
-          const itemCost = h.cost !== undefined ? h.cost : (h.amount || h.price || 0);
-          const itemTime = h.time || h.timestamp || '日時不明';
-
-          itemDiv.innerHTML = `
-            <div class="history-time">⏰ ${itemTime}${staffText}</div>
-            <div style="font-weight:bold; color:#111827;">${itemName}</div>
-            <div style="color:#ef4444; font-weight:bold; text-align:right; margin-top:2px;">-${itemCost} チップ</div>
-          `;
-          hList.appendChild(itemDiv);
-        });
-      }
+      hList.innerHTML = buildHistoryHTML(currentMember.history);
     }
 
     function renderProducts() {
@@ -569,28 +573,7 @@
       document.getElementById('modalMemberSubtitle').innerText = `会員ID: ${displayId} | 所持チップ: ${displayChips}枚`;
 
       const listDiv = document.getElementById('modalHistoryList');
-      listDiv.innerHTML = '';
-
-      if (!currentMember.history || currentMember.history.length === 0) {
-        listDiv.innerHTML = '<div style="color:#9ca3af; text-align:center; padding:20px;">購入履歴はまだありません</div>';
-      } else {
-        currentMember.history.forEach(h => {
-          const itemDiv = document.createElement('div');
-          itemDiv.className = 'history-item';
-          const staffText = h.staffId ? ` | 担当: ${h.staffId}` : '';
-
-          const itemName = h.items || h.item || h.name || '商品情報なし';
-          const itemCost = h.cost !== undefined ? h.cost : (h.amount || h.price || 0);
-          const itemTime = h.time || h.timestamp || '日時不明';
-
-          itemDiv.innerHTML = `
-            <div class="history-time">⏰ ${itemTime}${staffText}</div>
-            <div style="font-weight:bold; color:#111827;">${itemName}</div>
-            <div style="color:#ef4444; font-weight:bold; text-align:right; margin-top:2px;">-${itemCost} チップ</div>
-          `;
-          listDiv.appendChild(itemDiv);
-        });
-      }
+      listDiv.innerHTML = buildHistoryHTML(currentMember.history);
 
       document.getElementById('memberHistoryModal').style.display = 'flex';
     }

@@ -178,7 +178,10 @@
       statusTag.innerText = "照会中...";
       statusTag.classList.add('active');
 
-      // 残高照会専用の通信（他端末には送信されません）
+      // 1. iPadレジおよび全システムへQRデータを通知（従業員ロック解除・レジ会員選択用）
+      socket.emit('scan-qr', { code: trimmedData });
+
+      // 2. 本iPhone画面用の残高照会・入場ログ記録処理
       socket.emit('check-member-balance', { code: trimmedData });
 
       triggerVibration();
@@ -196,11 +199,30 @@
       }
     });
 
+    // システムロック状態変更のイベント通知（従業員キー読み取り時の通知）
+    socket.on('system-lock-status', (data) => {
+      if (!data.isLocked && !isScanning) {
+        statusTag.innerText = "ロック解除";
+        statusTag.classList.add('active');
+        resultContent.innerHTML = `<div style="color:#10b981; font-weight:bold; margin: 10px 0;">${data.message || 'システムロックを解除しました'}</div>`;
+        resetBtn.style.display = 'inline-block';
+      }
+    });
+
+    // サーバーからのエラー通知
+    socket.on('error-message', (data) => {
+      if (!isScanning) {
+        statusTag.innerText = "エラー";
+        statusTag.classList.remove('active');
+        resultContent.innerHTML = `<div style="color:#ef4444; font-weight:bold; margin: 10px 0;">${data.message}</div>`;
+        resetBtn.style.display = 'inline-block';
+      }
+    });
+
     function showMemberInfo(member) {
       statusTag.innerText = "照会完了";
       statusTag.classList.add('active');
 
-      // member.name を除去し、IDのみ表示に調整
       resultContent.innerHTML = `
         <div class="member-name">会員ID: ${member.id}</div>
         <div class="chip-container">

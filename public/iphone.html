@@ -378,13 +378,11 @@
 
       if (currentMode === 'member') {
         playBeepSound('success');
-        resultText.innerText = `会員QR読み取り: ${trimmedData}`;
+        resultText.innerText = `読み取りコード: ${trimmedData}`;
         
+        // サーバーへ送信（従業員ロック解除・会員選択の双方に対応）
         socket.emit('scan-qr', { 
-          action: 'exit',
-          code: trimmedData,
-          memberId: trimmedData,
-          id: trimmedData
+          code: trimmedData 
         });
       } else if (currentMode === 'restock') {
         playBeepSound('restock');
@@ -393,8 +391,6 @@
         
         socket.emit('restock-item', { 
           productId: trimmedData, 
-          janCode: trimmedData,
-          code: trimmedData,
           amount: amount 
         });
         
@@ -425,11 +421,24 @@
       const memberObj = data ? (data.member || data) : {};
       const memberId = memberObj.id || memberObj.memberId || memberObj.code || '不明';
 
-      resultText.innerText = `ID: ${memberId} を連携しました`;
+      resultText.innerText = `会員ID: ${memberId} を連携しました`;
 
       autoResetTimer = setTimeout(() => {
         resetToWaitState();
       }, 1800);
+    });
+
+    // システムロック状態の受信（従業員QR読み取り時の通知）
+    socket.on('system-lock-status', (data) => {
+      if (!data.isLocked && currentMode === 'member') {
+        statusTag.innerText = "ロック解除";
+        statusTag.className = "status-tag success";
+        resultText.innerText = data.message || "システムロックを解除しました";
+
+        autoResetTimer = setTimeout(() => {
+          resetToWaitState();
+        }, 1800);
+      }
     });
 
     // 待機状態に戻す
