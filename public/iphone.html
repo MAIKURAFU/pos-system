@@ -263,25 +263,15 @@
       }
 
       const hints = new Map();
-      const formats = [];
-
-      if (currentMode === 'member') {
-        // 会員モード: QRコード優先
-        formats.push(ZXing.BarcodeFormat.QR_CODE);
-      } else {
-        // 在庫補充モード: JANコード / 1Dバーコード全般 + QR
-        formats.push(
-          ZXing.BarcodeFormat.EAN_13,
-          ZXing.BarcodeFormat.EAN_8,
-          ZXing.BarcodeFormat.CODE_128,
-          ZXing.BarcodeFormat.UPC_A,
-          ZXing.BarcodeFormat.UPC_E,
-          ZXing.BarcodeFormat.CODE_39,
-          ZXing.BarcodeFormat.QR_CODE
-        );
-      }
+      
+      // JANコード専用のフォーマット指定（8桁: EAN_8 / 13桁: EAN_13）
+      const formats = [
+        ZXing.BarcodeFormat.EAN_13,
+        ZXing.BarcodeFormat.EAN_8
+      ];
+      
       hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
-      hints.set(ZXing.DecodeHintType.TRY_HARDER, true); // 解像度が低いバーコードの検出精度をアップ
+      hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
 
       codeReader = new ZXing.BrowserMultiFormatReader(hints);
 
@@ -316,18 +306,25 @@
 
     function onCodeScanned(scannedData) {
       if (!isScanning) return;
+
+      const trimmedData = scannedData.trim();
+
+      // JANコード検証: 8桁または13桁の半角数字以外は読み取り対象外として無視
+      const isJanCode = /^\d{8}$|^\d{13}$/.test(trimmedData);
+      if (!isJanCode) {
+        return;
+      }
+
       isScanning = false;
       if (autoResetTimer) clearTimeout(autoResetTimer);
 
-      const trimmedData = scannedData.trim();
       statusTag.innerText = "処理中";
       statusTag.className = "status-tag active";
 
       if (currentMode === 'member') {
         playBeepSound('success');
-        resultText.innerText = `コード読み取り: ${trimmedData}`;
+        resultText.innerText = `JANコード読み取り: ${trimmedData}`;
         
-        // サーバー側の受取形式（code / memberId / id）の不整合を防ぐため多重送信設定
         socket.emit('scan-qr', { 
           code: trimmedData,
           memberId: trimmedData,
@@ -338,7 +335,6 @@
         const amountInput = document.getElementById('restockAmount');
         const amount = parseInt(amountInput.value, 10) || 1;
         
-        // productId / janCode どちらの判定にも耐えうるようにキーを送信
         socket.emit('restock-item', { 
           productId: trimmedData, 
           janCode: trimmedData,
@@ -348,9 +344,8 @@
         
         statusTag.innerText = "補充完了";
         statusTag.className = "status-tag success";
-        resultText.innerText = `JAN/ID [${trimmedData}] を ${amount}個 補充しました`;
+        resultText.innerText = `JAN [${trimmedData}] を ${amount}個 補充しました`;
 
-        // 在庫補充時は1.8秒後に自動で次の読み取りへ復帰
         autoResetTimer = setTimeout(() => {
           resetToWaitState();
         }, 1800);
@@ -371,13 +366,11 @@
       statusTag.innerText = "連携完了";
       statusTag.className = "status-tag success";
 
-      // 会員データの構造（data.member.id または data.memberId 等）に柔軟に対応
       const memberObj = data ? (data.member || data) : {};
       const memberId = memberObj.id || memberObj.memberId || memberObj.code || '不明';
 
       resultText.innerText = `ID: ${memberId} を連携しました`;
 
-      // 会員スキャン時も1.8秒後に自動復帰
       autoResetTimer = setTimeout(() => {
         resetToWaitState();
       }, 1800);
@@ -389,7 +382,7 @@
       statusTag.innerText = "読み取り待機中";
       statusTag.className = "status-tag";
       resultText.innerText = currentMode === 'member' 
-        ? "カメラに会員QRコードをかざしてください" 
+        ? "カメラにJANコードをかざしてください" 
         : "カメラにJANバーコードをかざしてください";
       nextScanBtn.style.display = "none";
       isScanning = true;
