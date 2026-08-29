@@ -189,20 +189,36 @@ io.on('connection', (socket) => {
         });
       }
 
-      // iPadレジ端末へブロードキャスト通知を行わず、
-      // リクエストを送ってきた端末(member_check.html)だけに結果を返却する
       socket.emit('member-balance-result', { success: true, member });
     } else {
       socket.emit('member-balance-result', { success: false, message: '無効なQRコード形式です' });
     }
   });
 
-  // チップチャージ処理
+  // チップチャージ・増減処理（履歴へのログ追加対応版）
   socket.on('charge-chips', (data) => {
     if (isLocked) return socket.emit('error-message', { message: 'システムがロックされています' });
     const member = members.find(m => m.id === data.memberId);
     if (member) {
-      member.chips += data.amount;
+      const amount = parseInt(data.amount, 10) || 0;
+      if (amount === 0) return;
+
+      member.chips += amount;
+      const timeStr = getJSTTimeString(false);
+
+      // 増減内容に応じた項目名を設定（プラスならチャージ、マイナスなら調整など）
+      const actionName = amount > 0 ? 'チップチャージ' : 'チップ減額';
+
+      // 履歴の先頭に残高変更（チャージ・減額）ログを追加
+      // ※フロント側の buildHistoryHTML では cost が正の値のときにマイナス表示、負の値のときにプラス表示する仕様になっています
+      // そのため、チャージ(-amount)で「+〇〇枚」、減額(-amount)で「-〇〇枚」のように直感的に表示されるよう調整しています
+      member.history.unshift({
+        time: timeStr,
+        items: actionName,
+        cost: -amount, // フロントの表示仕様に合わせるため反転（正のチャージなら履歴上はプラス表示にするなど）
+        staffId: data.staffId || null
+      });
+
       io.emit('member-updated', { member });
     }
   });
@@ -265,7 +281,6 @@ io.on('connection', (socket) => {
     let prod = products.find(p => p.id === code);
 
     if (prod) {
-      // 既存商品の場合：在庫を加算
       prod.currentStock += amount;
       if (prod.currentStock > prod.initialStock) {
         prod.initialStock = prod.currentStock;
@@ -274,11 +289,10 @@ io.on('connection', (socket) => {
         ? Math.round(((prod.initialStock - prod.currentStock) / prod.initialStock) * 100) 
         : 0;
     } else {
-      // 新規JANコードの場合：商品一覧へ新しく追加
       prod = {
         id: code,
         name: `新商品 (${code})`,
-        category: '未分類', // スキャン直後は未分類として追加
+        category: '未分類',
         price: 0,
         currentStock: amount,
         initialStock: amount,
@@ -287,19 +301,18 @@ io.on('connection', (socket) => {
       products.push(prod);
     }
 
-    // 接続されている全端末（iPad / iPhone）へデータをリアルタイム同期
     io.emit('data-updated', { 
       member: members.find(m => m.id === currentMemberId) || null, 
       products 
     });
   });
 
-  // 商品情報更新（iPad側の編集機能用）
+  // 商品情報更新
   socket.on('update-product', (data) => {
     const prod = products.find(p => p.id === data.productId);
     if (prod) {
       prod.name = data.name;
-      prod.category = data.category || '未分類'; // ジャンルの受け取りと更新
+      prod.category = data.category || '未分類';
       prod.price = parseInt(data.price, 10) || 0;
       prod.currentStock = parseInt(data.currentStock, 10) || 0;
       if (prod.currentStock > prod.initialStock) prod.initialStock = prod.currentStock;
