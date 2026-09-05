@@ -169,8 +169,6 @@
     let isScanning = true;
     let currentMode = 'member';
     let autoResetTimer = null;
-    let scanInterval = null;
-    let isProcessingFrame = false;
 
     // --- 各会員の入退場状態を保持するマップ ---
     const memberStateMap = new Map();
@@ -286,25 +284,11 @@
       startScanner();
     }
 
-    // スキャナーおよびカメラの停止処理
-    function stopScanner() {
-      if (scanInterval) {
-        clearInterval(scanInterval);
-        scanInterval = null;
-      }
-      if (video.srcObject) {
-        const tracks = video.srcObject.getTracks();
-        tracks.forEach(track => track.stop());
-        video.srcObject = null;
-      }
+    // ZXing スキャナーの開始
+    async function startScanner() {
       if (codeReader) {
         codeReader.reset();
       }
-    }
-
-    // ZXing スキャナーの開始（青枠内限定スキャン）
-    async function startScanner() {
-      stopScanner();
 
       const hints = new Map();
       let formats = [];
@@ -337,63 +321,40 @@
           selectedDeviceId = videoInputDevices[videoInputDevices.length - 1].deviceId;
         }
 
-        const constraints = {
-          video: {
-            deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined,
-            facingMode: 'environment'
+        codeReader.decodeFromVideoDevice(selectedDeviceId, 'video', (result, err) => {
+          if (result && isScanning) {
+            // --- 青枠（.scan-guide）の内部にあるコードか判定 ---
+            const points = result.getResultPoints();
+            if (points && points.length > 0) {
+              // コードのコーナー座標の平均（中心点）を計算
+              let sumX = 0, sumY = 0;
+              points.forEach(p => { sumX += p.x; sumY += p.y; });
+              const centerX = sumX / points.length;
+              const centerY = sumY / points.length;
+
+              // video要素とscanGuide要素の位置関係を取得
+              const videoRect = video.getBoundingClientRect();
+              const guideRect = scanGuide.getBoundingClientRect();
+
+              if (videoRect.width > 0 && videoRect.height > 0) {
+                // ビデオの実際の解像度と表示サイズの比率
+                const scaleX = video.videoWidth / videoRect.width;
+                const scaleY = video.videoHeight / videoRect.height;
+
+                // ガイド枠の画面上の座標をビデオ上のピクセル座標に変換
+                const guideLeft = (guideRect.left - videoRect.left) * scaleX;
+                const guideRight = (guideRect.right - videoRect.left) * scaleX;
+                const guideTop = (guideRect.top - videoRect.top) * scaleY;
+                const guideBottom = (guideRect.bottom - videoRect.top) * scaleY;
+
+                // 中心点が青枠内に収まっている場合のみ処理対象とする
+                if (centerX >= guideLeft && centerX <= guideRight && centerY >= guideTop && centerY <= guideBottom) {
+                  onCodeScanned(result.getText());
+                }
+              }
+            }
           }
-        };
-
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
-        video.srcObject = stream;
-        await video.play();
-
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
-
-        // 定期的に青枠部分の映像だけを切り出してデコード実行
-        scanInterval = setInterval(async () => {
-          if (!isScanning || isProcessingFrame) return;
-          if (video.readyState !== video.HAVE_ENOUGH_DATA && video.readyState !== video.HAVE_FUTURE_DATA) return;
-
-          isProcessingFrame = true;
-          try {
-            const videoRect = video.getBoundingClientRect();
-            const guideRect = scanGuide.getBoundingClientRect();
-
-            if (videoRect.width === 0 || videoRect.height === 0) {
-              isProcessingFrame = false;
-              return;
-            }
-
-            const scaleX = video.videoWidth / videoRect.width;
-            const scaleY = video.videoHeight / videoRect.height;
-
-            const sx = Math.max(0, (guideRect.left - videoRect.left) * scaleX);
-            const sy = Math.max(0, (guideRect.top - videoRect.top) * scaleY);
-            const sWidth = Math.min(video.videoWidth - sx, guideRect.width * scaleX);
-            const sHeight = Math.min(video.videoHeight - sy, guideRect.height * scaleY);
-
-            if (sWidth <= 0 || sHeight <= 0) {
-              isProcessingFrame = false;
-              return;
-            }
-
-            canvas.width = sWidth;
-            canvas.height = sHeight;
-            ctx.drawImage(video, sx, sy, sWidth, sHeight, 0, 0, sWidth, sHeight);
-
-            const result = await codeReader.decodeFromImageElement(canvas);
-            if (result && isScanning) {
-              onCodeScanned(result.getText());
-            }
-          } catch (e) {
-            // 検出されない場合は例外が発生するため無視
-          } finally {
-            isProcessingFrame = false;
-          }
-        }, 150);
-
+        });
       } catch (err) {
         console.error("Camera start error:", err);
         statusTag.innerText = "エラー";
