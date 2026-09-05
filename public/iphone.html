@@ -108,7 +108,7 @@
     }
     .status-tag.active { background: #0284c7; color: #fff; }
     .status-tag.success { background: #10b981; color: #fff; }
-    .status-tag.checkout { background: #f59e0b; color: #fff; } /* 退場時の色（オレンジ）を追加 */
+    .status-tag.checkout { background: #f59e0b; color: #fff; }
     .status-tag.error { background: #ef4444; color: #fff; }
 
     .result-text { font-size: 15px; font-weight: bold; margin: 6px 0; word-break: break-all; }
@@ -167,16 +167,18 @@
 
     let codeReader = null;
     let isScanning = true;
-    let currentMode = 'member'; // 'member' または 'restock'
+    let currentMode = 'member';
     let autoResetTimer = null;
+    let scanInterval = null;
+    let isProcessingFrame = false;
 
-    // --- 各会員の入退場状態を保持するマップ (key: 会員コード, value: 'entered' | 'exited') ---
+    // --- 各会員の入退場状態を保持するマップ ---
     const memberStateMap = new Map();
 
     // --- 誤読防止用バッファ変数 ---
     let lastCandidateCode = "";
     let candidateCount = 0;
-    const REQUIRED_MATCH_COUNT = 2; // 確定に必要な連続一致回数（ブレ対策）
+    const REQUIRED_MATCH_COUNT = 2;
 
     // JANコードのチェックデジット検証 (モジュラス10)
     function isValidJanCheckDigit(janStr) {
@@ -232,7 +234,6 @@
           osc.start();
           osc.stop(audioCtx.currentTime + 0.1);
         } else {
-          // 補充時のピピッという2音
           osc.frequency.setValueAtTime(1200, audioCtx.currentTime);
           gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
           osc.connect(gain);
@@ -262,7 +263,6 @@
       }
     }
 
-    // 初回タッチ時にオーディオを初期化（iOS制限対策）
     document.addEventListener('touchstart', initAudio, { once: true });
     document.addEventListener('click', initAudio, { once: true });
 
@@ -286,23 +286,31 @@
       startScanner();
     }
 
-    // ZXing スキャナーの開始
-    async function startScanner() {
+    // スキャナーおよびカメラの停止処理
+    function stopScanner() {
+      if (scanInterval) {
+        clearInterval(scanInterval);
+        scanInterval = null;
+      }
+      if (video.srcObject) {
+        const tracks = video.srcObject.getTracks();
+        tracks.forEach(track => track.stop());
+        video.srcObject = null;
+      }
       if (codeReader) {
         codeReader.reset();
       }
+    }
+
+    // ZXing スキャナーの開始（青枠内限定スキャン）
+    async function startScanner() {
+      stopScanner();
 
       const hints = new Map();
-      
-      // モード別に読み取るバーコードフォーマットを指定
       let formats = [];
       if (currentMode === 'member') {
-        // 会員スキャン：QRコード
-        formats = [
-          ZXing.BarcodeFormat.QR_CODE
-        ];
+        formats = [ZXing.BarcodeFormat.QR_CODE];
       } else {
-        // 在庫補充：JANコード (13桁・8桁)
         formats = [
           ZXing.BarcodeFormat.EAN_13,
           ZXing.BarcodeFormat.EAN_8
@@ -316,7 +324,6 @@
 
       try {
         const videoInputDevices = await codeReader.listVideoInputDevices();
-        // 背面カメラの選択
         let selectedDeviceId = undefined;
         const backCamera = videoInputDevices.find(device => 
           device.label.toLowerCase().includes('back') || 
@@ -330,11 +337,63 @@
           selectedDeviceId = videoInputDevices[videoInputDevices.length - 1].deviceId;
         }
 
-        codeReader.decodeFromVideoDevice(selectedDeviceId, 'video', (result, err) => {
-          if (result && isScanning) {
-            onCodeScanned(result.getText());
+        const constraints = {
+          video: {
+            deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined,
+            facingMode: 'environment'
           }
-        });
+        };
+
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        video.srcObject = stream;
+        await video.play();
+
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+        // 定期的に青枠部分の映像だけを切り出してデコード実行
+        scanInterval = setInterval(async () => {
+          if (!isScanning || isProcessingFrame) return;
+          if (video.readyState !== video.HAVE_ENOUGH_DATA && video.readyState !== video.HAVE_FUTURE_DATA) return;
+
+          isProcessingFrame = true;
+          try {
+            const videoRect = video.getBoundingClientRect();
+            const guideRect = scanGuide.getBoundingClientRect();
+
+            if (videoRect.width === 0 || videoRect.height === 0) {
+              isProcessingFrame = false;
+              return;
+            }
+
+            const scaleX = video.videoWidth / videoRect.width;
+            const scaleY = video.videoHeight / videoRect.height;
+
+            const sx = Math.max(0, (guideRect.left - videoRect.left) * scaleX);
+            const sy = Math.max(0, (guideRect.top - videoRect.top) * scaleY);
+            const sWidth = Math.min(video.videoWidth - sx, guideRect.width * scaleX);
+            const sHeight = Math.min(video.videoHeight - sy, guideRect.height * scaleY);
+
+            if (sWidth <= 0 || sHeight <= 0) {
+              isProcessingFrame = false;
+              return;
+            }
+
+            canvas.width = sWidth;
+            canvas.height = sHeight;
+            ctx.drawImage(video, sx, sy, sWidth, sHeight, 0, 0, sWidth, sHeight);
+
+            const result = await codeReader.decodeFromImageElement(canvas);
+            if (result && isScanning) {
+              onCodeScanned(result.getText());
+            }
+          } catch (e) {
+            // 検出されない場合は例外が発生するため無視
+          } finally {
+            isProcessingFrame = false;
+          }
+        }, 150);
+
       } catch (err) {
         console.error("Camera start error:", err);
         statusTag.innerText = "エラー";
@@ -348,7 +407,6 @@
 
       const trimmedData = scannedData.trim();
 
-      // 在庫補充（JAN）の場合のみチェックデジットを検証
       if (currentMode === 'restock') {
         if (!isValidJanCheckDigit(trimmedData)) {
           candidateCount = 0;
@@ -357,7 +415,6 @@
         }
       }
 
-      // 複数フレームでの連続一致検証（ブレ対策）
       if (trimmedData === lastCandidateCode) {
         candidateCount++;
       } else {
@@ -365,12 +422,10 @@
         candidateCount = 1;
       }
 
-      // 指定回数（2回）連続して同じコードが検出されるまで確定しない
       if (candidateCount < REQUIRED_MATCH_COUNT) {
         return;
       }
 
-      // 確定処理
       isScanning = false;
       candidateCount = 0;
       lastCandidateCode = "";
@@ -381,18 +436,15 @@
       statusTag.className = "status-tag active";
 
       if (currentMode === 'member') {
-        // --- 入退場状態のトグル判定 (未入場/退場中なら入場、入場中なら退場) ---
         const currentState = memberStateMap.get(trimmedData) || 'exited';
         const isEntering = (currentState === 'exited');
         const actionType = isEntering ? 'check-in' : 'check-out';
         
-        // 状態を反転して保存
         memberStateMap.set(trimmedData, isEntering ? 'entered' : 'exited');
 
         playBeepSound('success');
         resultText.innerText = `読み取りコード: ${trimmedData} (${isEntering ? '入場' : '退場'})`;
         
-        // サーバーへ送信（actionプロパティを追加しつつ、既存のcodeプロパティも維持）
         socket.emit('scan-qr', { 
           code: trimmedData,
           action: actionType
@@ -419,14 +471,12 @@
       nextScanBtn.style.display = "inline-block";
     }
 
-    // サーバーからのエラー応答
     socket.on('error-message', (data) => {
       statusTag.innerText = "エラー";
       statusTag.className = "status-tag error";
       resultText.innerText = (data && data.message) ? data.message : "エラーが発生しました";
     });
 
-    // 会員読み取り完了の通知
     socket.on('member-scanned', (data) => {
       statusTag.innerText = "読取完了";
       statusTag.className = "status-tag success";
@@ -441,7 +491,6 @@
       }, 1800);
     });
 
-    // システムロック状態の受信（従業員QR読み取り時の通知）
     socket.on('system-lock-status', (data) => {
       if (!data.isLocked && currentMode === 'member') {
         statusTag.innerText = "ロック解除";
@@ -454,7 +503,6 @@
       }
     });
 
-    // 待機状態に戻す
     function resetToWaitState() {
       if (autoResetTimer) clearTimeout(autoResetTimer);
       candidateCount = 0;
